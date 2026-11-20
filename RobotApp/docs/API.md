@@ -1,15 +1,17 @@
 # Robot HTTP API v1 (Chiku and Jinu)
 
 Both robots serve the same API on port 80 (`http://chiku.local`, `http://jinu.local` or the IP).
-POST arguments are URL query parameters unless noted. Every POST answers `{"ok":true}`.
+POST arguments are URL query parameters unless noted. Every POST answers `{"ok":true}` or `{"ok":true,"msg":"..."}` (the robot's own feedback, e.g. the gait it started). Bad requests get HTTP 400 with a text reason, and are logged.
 Firmware sources: `Chiku/src/head/net.cpp` and `Jinu/src/net.cpp`. `RobotApp/tools/mock-robot.mjs` implements the same API for development.
 
 ## Read
 
 | Request | Answer |
 |---|---|
-| `GET /api/state` | `robot` (`chiku`/`jinu`), `api`, `fw`, `caps[]`, `ip`, `ssid`, `rssi`, `uptime` (s), `heap`, `mode`, `mute`, `mood`, `brightness`, `volume`, `dist` (cm, -1 = none), `pads` (bit n = pad n touched), `padsOnline`, `avoid`, `gait`, `busy`, `power` (0 active, 1 dim, 2 sleep), `audio`, `servo[]` = `{trim,min,max,inv,cur}`. Chiku adds `screen`, `batt`, `charging`, `pca`, `imu{ok,x,y,z,tilt}`, `cam{alive,ip,state,stream}`, `weather`, `lat`, `lon`, `alarms[]`, `timers[]` |
+| `GET /api/state` | `robot` (`chiku`/`jinu`), `api`, `fw`, `caps[]`, `ip`, `ssid`, `rssi`, `uptime` (s), `heap`, `mode`, `mute`, `mood`, `brightness`, `volume`, `dist` (cm, -1 = none), `pads` (bit n = pad n touched), `padsOnline`, `avoid`, `gait`, `busy`, `power` (0 active, 1 dim, 2 sleep), `audio`, `servo[]` = `{trim,min,max,inv,cur}`. Chiku adds `screen`, `batt`, `charging`, `pca`, `imu{ok,x,y,z,tilt}`, `cam{alive,ip,state,stream,snap}` (`snap` = size in bytes of the last snapshot), `weather`, `lat`, `lon`, `alarms[]`, `timers[]` |
 | `GET /api/events?since=N` | `{"next":N2,"events":[{n,t,type,a,b}]}`: last 48 events with `n > since` (touch gestures, shake, buttons ...). If `next` is smaller than your cursor the robot rebooted |
+| `GET /api/log?since=N` | `{"next":N2,"lines":[{n,t,l,m}]}`: the robot's complete log (last 100 lines): its own `[tag] text` lines, every API call it received (`[api] POST /api/mood m=3`), every event, and the ESP system logs (Wi-Fi, I2C errors ...). `l` = 0 error, 1 warning, 2 info, 3 debug. Also printed on the USB serial port. If `next` is smaller than your cursor the robot rebooted |
+| `GET /api/diag` | `{"items":[{name,ok,detail,live}],heap,uptime}`: results of the start-up hardware checks (display, touch, imu, rtc, pmu, psram, audio, servo_driver, pad_expander, filesystem) plus live checks (sonar, wifi, heap; Chiku: imu_gravity, rtc_time, cam_link, battery) |
 | `GET /api/voice/list` | `["hello","happy",...]` clips in LittleFS `/voice` |
 
 `caps` (Chiku): `screens alarms timers weather imu cam pan battery display_test`. (Jinu): `display_test rgb_led`.
@@ -43,6 +45,7 @@ Pad ids: Chiku 0 ear L, 1 ear R, 2 leg L, 3 leg R, 4 body. Jinu 0 head L, 1 head
 | `POST /api/beep?hz=&ms=` | tone |
 | `POST /api/melody?id=0..7&loop=0\|1` | startup alarm happy sad pet timer dizzy click |
 | `POST /api/audio/stop` | stop sound |
+| `POST /api/led?r=&g=&b=` / `?off=1` | Jinu: test colour on the RGB LED / follow the mood again |
 | `POST /api/display?p=0..6` | test pattern: 0 off, red, green, blue, white, black, grey ramp |
 | `POST /api/sim?pad=N&g=1..5` | pretend a pad gesture happened |
 | `POST /api/sim?ev=NAME` | Chiku: shake pickup putdown fall tap obstacle touch alarm. Jinu: obstacle button |

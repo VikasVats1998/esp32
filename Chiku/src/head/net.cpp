@@ -150,6 +150,7 @@ static void handleState() {
   cam["alive"] = camlink::alive(); cam["ip"] = camlink::ip(); cam["state"] = camlink::camState();
   char url[48]; camlink::streamUrl(url, sizeof(url));
   cam["stream"] = url;
+  cam["snap"] = camlink::lastSnapBytes();
   const WeatherData& w = weather::data();
   JsonObject wo = d["weather"].to<JsonObject>();
   wo["valid"] = w.valid; wo["temp"] = w.temp; wo["min"] = w.tmin; wo["max"] = w.tmax;

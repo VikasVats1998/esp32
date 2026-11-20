@@ -14,11 +14,24 @@ npm install
 npx expo start            # scan the QR code with Expo Go (phone on the same Wi-Fi as the robots)
 ```
 
-1. **Robots** tab: *Scan Wi-Fi network* (asks every address of your subnet), or add `chiku.local` / `jinu.local` / an IP.
-2. **Control**: mode (Auto / Manual / Explore), faces, feelings, moves, voice, look pad.
-3. **Test**: live touch pads, sonar bar, IMU, display test patterns, sound test, simulated touches and events, event log.
-4. **Servos**: slider per servo, trim / min / max / reverse, save to the robot.
+1. **Robots**: *Scan Wi-Fi network* (asks every address of your subnet), or add `chiku.local` / `jinu.local` / an IP.
+2. **Control**: mode (Auto / Manual / Explore), mute, faces, feelings, moves, voice clips, look pad, Chiku screens.
+3. **Test** (four views):
+   * **Live**: touch pads lighting up, sonar bar, IMU, hardware status, display test patterns, sound test.
+   * **Checklist**: one test for **every** screen, touch pad, sensor, motor and sound (about 40 tests). Automatic tests decide
+     pass/fail themselves; "you act" tests wait for your touch or hand; "you confirm" tests make the robot move/play/show
+     something and ask what you saw or heard. Summary, share-as-text report.
+   * **Servos**: slider per servo, trim / min / max / reverse, save to the robot.
+   * **Simulate**: fake any pad gesture or sensor event without touching the robot.
+4. **Console**:
+   * **Commands**: type `mood happy`, `move dance`, `servo 1 100`, `pad 4 double`, or any raw request (`POST /api/beep?hz=440&ms=300`). Type `help`.
+   * **Robot log**: the robot's complete log (its own messages, every request it received, events, ESP system logs), with level filter, search, pause, share.
+   * **Events**: touch gestures, shakes, buttons as the robot saw them.
+   * **Requests**: every request the app sent, with status, time and answer (and every failure).
 5. **Settings**: brightness, volume, (Chiku) weather location, alarms, timers, camera, voice upload, firmware (.bin) upload, reboot.
+
+**Feedback on every command:** a green/red line at the top of every screen shows what the robot answered (and how long it took),
+including the robot's own message. Errors also appear in Console > Requests and Console > Robot log.
 
 Use **Manual** mode while testing hardware: the robot then only does what you tell it.
 
@@ -26,7 +39,7 @@ Use **Manual** mode while testing hardware: the robot then only does what you te
 
 ```bash
 node tools/mock-robot.mjs                       # Chiku on :8787, Jinu on :8788
-npx tsx tools/smoke.mts localhost:8787 chiku    # API client smoke test (also works against a real robot)
+npx tsx tools/smoke.mts localhost:8787 chiku    # ~50 checks: API, feedback, log, console commands, checklist (also works against a real robot)
 ```
 In a dev build the Robots tab has "Mock" buttons (Android emulator uses `10.0.2.2:8787`).
 

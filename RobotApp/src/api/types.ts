@@ -49,7 +49,7 @@ export interface RobotState {
   lat?: number;
   lon?: number;
   imu?: { ok: boolean; x: number; y: number; z: number; tilt: number };
-  cam?: { alive: boolean; ip: string; state: string; stream: string };
+  cam?: { alive: boolean; ip: string; state: string; stream: string; snap?: number };
   weather?: { valid: boolean; temp: number; min: number; max: number; text: string };
   alarms?: { on: boolean; h: number; m: number; days: number }[];
   timers?: number[];
@@ -75,4 +75,52 @@ export interface SavedRobot {
   name: string;
   host: string;
   kind: RobotKind;
+}
+
+/** One line of the robot's own log (serial output + system logs). l: 0 error, 1 warning, 2 info, 3 debug. */
+export interface LogLine {
+  n: number;
+  t: number;
+  l: number;
+  m: string;
+}
+
+export interface LogReply {
+  next: number;
+  lines: LogLine[];
+}
+
+export interface DiagItem {
+  name: string;
+  ok: boolean;
+  detail: string;
+  /** true = measured now, false = result of the start-up check */
+  live?: boolean;
+}
+
+export interface DiagReply {
+  items: DiagItem[];
+  heap?: number;
+  uptime?: number;
+}
+
+/** Answer of a POST command. `msg` is the robot's own feedback text. */
+export interface CommandReply {
+  ok: boolean;
+  msg?: string;
+}
+
+/** One request the app sent to a robot (for the Traffic log and the feedback line). */
+export interface Traffic {
+  id: number;
+  at: number;
+  host: string;
+  method: string;
+  path: string;
+  body?: string;
+  status?: number;
+  ok: boolean;
+  ms: number;
+  response?: string;
+  error?: string;
 }

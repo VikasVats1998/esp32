@@ -2,28 +2,14 @@ import { useMemo, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { DISPLAY_PATTERNS, GESTURES, MELODIES, PAD_NAMES } from '@/api/catalog';
-import type { RobotEvent } from '@/api/types';
 import { ThemedText } from '@/components/themed-text';
-import { Button, Card, Chip, Page, Stat, Wrap, useAccent } from '@/components/ui';
+import { Checklist } from '@/components/checklist';
+import { ServosPanel } from '@/components/servos-panel';
+import { Button, Card, Chip, Page, Segmented, Stat, Wrap, useAccent } from '@/components/ui';
 import { Spacing } from '@/constants/theme';
 import { useRobotState, useSend } from '@/hooks/use-robot';
 import { useTheme } from '@/hooks/use-theme';
 import { useUi } from '@/store/robots';
-
-function describe(e: RobotEvent, pads: string[]) {
-  switch (e.type) {
-    case 'pad':
-      return `${pads[e.a] ?? `pad ${e.a}`}: ${GESTURES[e.b] ?? e.b}`;
-    case 'obstacle':
-      return `obstacle at ${e.a} cm`;
-    case 'motion':
-      return `motion ${e.a} x${e.b}`;
-    case 'button':
-      return e.a === 2 ? 'BOOT long press' : 'BOOT short press';
-    default:
-      return e.a || e.b ? `${e.type} (${e.a}, ${e.b})` : e.type;
-  }
-}
 
 export default function TestScreen() {
   const theme = useTheme();
@@ -31,8 +17,8 @@ export default function TestScreen() {
   const send = useSend();
   const { state } = useRobotState();
   const events = useUi((s) => s.events);
-  const clearEvents = useUi((s) => s.clearEvents);
   const [simPad, setSimPad] = useState(0);
+  const [tab, setTab] = useState<'live' | 'checklist' | 'servos' | 'simulate'>('live');
 
   const kind = state?.robot ?? 'chiku';
   const padNames = PAD_NAMES[kind];
@@ -49,6 +35,20 @@ export default function TestScreen() {
 
   return (
     <Page title="Test">
+      <Segmented
+        options={[
+          { value: 'live' as const, label: 'Live' },
+          { value: 'checklist' as const, label: 'Checklist' },
+          { value: 'servos' as const, label: 'Servos' },
+          { value: 'simulate' as const, label: 'Simulate' },
+        ]}
+        value={tab}
+        onChange={setTab}
+      />
+      {tab === 'checklist' ? <Checklist /> : null}
+      {tab === 'servos' ? <ServosPanel /> : null}
+      {tab === 'live' ? (
+        <>
       <Card title="Touch pads (live)">
         {state && !state.padsOnline ? (
           <ThemedText type="small" style={{ color: '#FF3B30' }}>
@@ -135,6 +135,10 @@ export default function TestScreen() {
         <Button label="Stop sound" color="#FF3B30" onPress={() => send((c) => c.stopAudio())} />
       </Card>
 
+        </>
+      ) : null}
+      {tab === 'simulate' ? (
+        <>
       <Card title="Simulate a touch (no hands needed)">
         <Wrap>
           {padNames.map((n, i) => (
@@ -160,18 +164,8 @@ export default function TestScreen() {
         </Wrap>
       </Card>
 
-      <Card title="Event log">
-        <Button label="Clear" color="#8E8E93" onPress={clearEvents} />
-        {events.length === 0 ? <ThemedText themeColor="textSecondary">Touch a pad or press a simulate button.</ThemedText> : null}
-        {[...events].reverse().slice(0, 40).map((e) => (
-          <View key={e.n} style={styles.logRow}>
-            <ThemedText type="small" themeColor="textSecondary" style={styles.logTime}>
-              {(e.t / 1000).toFixed(1)}s
-            </ThemedText>
-            <ThemedText type="small">{describe(e, padNames)}</ThemedText>
-          </View>
-        ))}
-      </Card>
+        </>
+      ) : null}
     </Page>
   );
 }

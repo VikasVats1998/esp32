@@ -4,7 +4,7 @@ import { StyleSheet, View } from 'react-native';
 
 import { SERVO_NAMES } from '@/api/catalog';
 import { ThemedText } from '@/components/themed-text';
-import { Button, Card, Chip, Page, SwitchRow, Wrap, useAccent } from '@/components/ui';
+import { Button, Card, Chip, SwitchRow, Wrap, useAccent } from '@/components/ui';
 import type { RobotState } from '@/api/types';
 import { Spacing } from '@/constants/theme';
 import { makeThrottle } from '@/lib/throttle';
@@ -32,9 +32,10 @@ function Stepper({ label, value, onChange, step = 1, lo, hi }: { label: string; 
   );
 }
 
-export default function ServosScreen() {
+/** Servo sliders with trim / limits / reverse. Created once per robot so polling never overwrites edits. */
+export function ServosPanel() {
   const { state, robot } = useRobotState();
-  return <Page title="Servos">{state && robot ? <ServosBody key={robot.id} init={state} /> : null}</Page>;
+  return state && robot ? <ServosBody key={robot.id} init={state} /> : null;
 }
 
 function ServosBody({ init }: { init: RobotState }) {

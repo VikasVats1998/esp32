@@ -3,12 +3,16 @@ import { DarkTheme, DefaultTheme, ThemeProvider } from 'expo-router';
 import { useColorScheme } from 'react-native';
 
 import AppTabs from '@/components/app-tabs';
-import { useEventPump } from '@/hooks/use-robot';
+import { useConnectionNotes, useEventPump, useLogPump } from '@/hooks/use-robot';
+import { installFeedback } from '@/lib/feedback';
 
 const queryClient = new QueryClient();
+installFeedback();
 
 function Pumps() {
   useEventPump();
+  useLogPump();
+  useConnectionNotes();
   return null;
 }
 

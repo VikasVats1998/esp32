@@ -1,5 +1,5 @@
 // Small set of building blocks used by all screens.
-import { type ReactNode } from 'react';
+import { type ReactNode, useEffect } from 'react';
 import { Pressable, ScrollView, StyleSheet, Switch, Text, View, type ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -8,11 +8,41 @@ import { ThemedText } from '@/components/themed-text';
 import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
 import { useRobotState } from '@/hooks/use-robot';
 import { useTheme } from '@/hooks/use-theme';
+import { useFeedback } from '@/store/diagnostics';
 import { useUi } from '@/store/robots';
 
 export function useAccent() {
   const { robot } = useRobotState();
   return ACCENT[robot?.kind ?? 'chiku'];
+}
+
+/** One line that shows what happened to the last command (OK / failed, text from the robot, time). */
+export function FeedbackBar() {
+  const last = useFeedback((s) => s.last);
+  const clear = useFeedback((s) => s.clear);
+  useEffect(() => {
+    if (!last) return;
+    const id = last.id;
+    const timer = setTimeout(() => {
+      if (useFeedback.getState().last?.id === id) clear();
+    }, 6000);
+    return () => clearTimeout(timer);
+  }, [last, clear]);
+  if (!last) return null;
+  const color = last.ok ? '#34C759' : '#FF3B30';
+  return (
+    <Pressable onPress={clear} style={[styles.banner, { backgroundColor: `${color}22`, flexDirection: 'row', gap: 8 }]}>
+      <ThemedText type="smallBold" style={{ color }}>
+        {last.ok ? '✓' : '✗'}
+      </ThemedText>
+      <ThemedText type="small" style={{ color, flex: 1 }}>
+        {last.text}
+      </ThemedText>
+      <ThemedText type="small" style={{ color }}>
+        {last.ms} ms
+      </ThemedText>
+    </Pressable>
+  );
 }
 
 /** Page with a scroll area, title, connection banner and error banner. */
@@ -39,6 +69,7 @@ export function Page({ title, children }: { title: string; children: ReactNode }
               </View>
             ) : null}
           </View>
+          <FeedbackBar />
           {lastError ? (
             <Pressable onPress={() => setError(undefined)} style={[styles.banner, { backgroundColor: '#FF3B3022' }]}>
               <ThemedText type="small" style={{ color: '#FF3B30' }}>

@@ -1,10 +1,11 @@
 // Hooks that give screens the active robot, its live state and a safe way to send commands.
 import { useQuery } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 
 import { RobotClient } from '@/api/client';
 import type { RobotState, SavedRobot } from '@/api/types';
+import { useLogs } from '@/store/diagnostics';
 import { useRobots, useUi } from '@/store/robots';
 
 export function useActiveRobot(): { robot?: SavedRobot; client?: RobotClient } {
@@ -57,6 +58,45 @@ export function useEventPump() {
       clearInterval(id);
     };
   }, [client, connected, pushEvents]);
+}
+
+/** Polls the robot's own log (firmware serial output + system logs) into the Console. */
+export function useLogPump() {
+  const { client, connected } = useRobotState();
+  const push = useLogs((s) => s.push);
+  useEffect(() => {
+    if (!client || !connected) return;
+    let stopped = false;
+    const tick = async () => {
+      try {
+        const since = useLogs.getState().cursor;
+        const reply = await client.log(since);
+        if (!stopped && (reply.lines.length || reply.next < since)) push(reply.lines, reply.next);
+      } catch {
+        /* connection errors are shown by the state query */
+      }
+    };
+    const id = setInterval(tick, 700);
+    return () => {
+      stopped = true;
+      clearInterval(id);
+    };
+  }, [client, connected, push]);
+}
+
+/** Writes a line to the Console when the connection to the robot is lost or comes back. */
+export function useConnectionNotes() {
+  const { robot, connected, error } = useRobotState();
+  const note = useLogs((s) => s.note);
+  const lastRef = useRef<boolean | undefined>(undefined);
+  useEffect(() => {
+    if (!robot) return;
+    if (lastRef.current === connected) return;
+    if (lastRef.current !== undefined || connected) {
+      note(connected ? `connected to ${robot.name} (${robot.host})` : `connection lost: ${error?.message ?? 'no answer'}`);
+    }
+    lastRef.current = connected;
+  }, [robot, connected, error, note]);
 }
 
 /** Wraps a robot call: haptic tap, error banner on failure, state refresh afterwards. */

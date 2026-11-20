@@ -24,9 +24,9 @@ export default function AppTabs() {
         <NativeTabs.Trigger.Label>Test</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="checklist" md="fact_check" />
       </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="servos">
-        <NativeTabs.Trigger.Label>Servos</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf="slider.horizontal.3" md="tune" />
+      <NativeTabs.Trigger name="console">
+        <NativeTabs.Trigger.Label>Console</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf="terminal.fill" md="terminal" />
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="settings">
         <NativeTabs.Trigger.Label>Settings</NativeTabs.Trigger.Label>
