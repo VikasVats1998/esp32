@@ -45,7 +45,7 @@ so there is no clash. (If you ever join the buses, solder PCA9685 pad A0 -> addr
 The PCA9685 **OE pin is not wired** (no free pin). Servo outputs are switched off with the
 PCA9685 "full off" bit and the chip is put to sleep after 2 s idle.
 
-## Neck wires (6 wires, about 15 cm)
+## Neck wires (7 wires, about 15 cm)
 
 | # | Wire | Head header pin | Body side |
 |---|---|---|---|
@@ -54,7 +54,8 @@ PCA9685 "full off" bit and the chip is put to sleep after 2 s idle.
 | 3 | SDA | 6 (GPIO17) | PCA9685 SDA |
 | 4 | SCL | 7 (GPIO18) | PCA9685 SCL |
 | 5 | TTP223 | 8 (GPIO16) | TTP223 OUT |
-| 6 | UART | 4 (GPIO44) / 5 (GPIO43) | ESP32-CAM, **crossed**: head TX -> CAM RX, head RX <- CAM TX (2 wires, so 7 wires in total) |
+| 6 | CAM TX | 4 (GPIO44, head RX) | ESP32-CAM GPIO14 (crossed) |
+| 7 | CAM RX | 5 (GPIO43, head TX) | ESP32-CAM GPIO13 (crossed) |
 
 Add 4.7 k pull-ups to 3V3 on SDA/SCL if your PCA9685 board has none (most have 10 k).
 The 5 V rail for the servos goes **only** to PCA9685 V+ (from the 5 V / 5 A buck), never to the head.
