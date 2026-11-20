@@ -1,60 +1,35 @@
-# ESP32-C6 EMO Robot
+# ESP32 robots and accessories
 
-EMO-style desk robot sketches for the **Waveshare ESP32-C6-LCD-1.47** (ST7789 172x320 screen, used in landscape).
+| Folder | What | Board | Status |
+|---|---|---|---|
+| [Chiku](Chiku/docs/README.md) | robot head: face, feelings, servos, sonar, voice, clock, weather, Wi-Fi app API, + ESP32-CAM | Waveshare ESP32-S3-Touch-AMOLED-1.75 | builds, not yet tested on hardware |
+| [Jinu](Jinu/docs/README.md) | second robot: face, feelings, 5 touch pads, servos, sonar, voice | Waveshare ESP32-C6-LCD-1.47 | builds, not yet tested on hardware |
+| [Desk](Desk/docs/README.md) | standing-desk accessory: presses the handset buttons, reads the height, secure link | ESP32-S3 Super Mini | builds, wiring unverified |
+| [RobotApp](RobotApp/README.md) | phone app (Expo SDK 58) to control and test everything | iOS / Android | builds, tested against mocks |
+| [Bringup](Bringup/README.md) | laptop toolkit: flash, test every board, write a report to paste | Python | tested against simulators |
+| [Probe](Probe/README.md) | read-only measuring firmware (voltages, edges, serial) for unknown electronics | ESP32-S3 Super Mini | builds |
+| [Shared](Shared) | `DeskLink` (secure desk link) and `RemoteLink` (radio frames) libraries | - | PC tests pass |
+| [Gimbal](Gimbal/docs/README.md), [Remote](Remote/docs/README.md) | idea: radio remote for a DJI Osmo Mobile SE | ESP32-S3 Super Mini | **paused** (only an inquiry) |
+| [Emo](Emo/README.md) | older ESP32-C6 EMO Arduino sketches | ESP32-C6-LCD-1.47 | old |
 
-| Sketch | What it does |
+## Build
+
+```bash
+pip install platformio "click<8.2"          # click 8.2+ breaks the bundled esptool
+pio run -d Chiku -e head                     # also: -e cam
+pio run -d Jinu -e jinu
+pio run -d Desk -e desk
+cd RobotApp && npm install && npx expo start
+```
+
+## Test
+
+| Command | Checks |
 |---|---|
-| [EmoFace](EmoFace/EmoFace.ino) | Animated EMO eyes: blinking, looking around, 8 moods |
-| [EmoPro](EmoPro/EmoPro.ino) | Multi-mode showcase: EMO face, Flappy EMO game, light bulb, Matrix rain, plasma, warp starfield, fireworks (BOOT switches modes) |
-| [EmoBot](EmoBot/EmoBot.ino) | Walking robot: 4 servos (2 hips + 2 feet), HC-SR04 ultrasonic, 2x TTP223 touch, pet/explore/sleep behaviour |
-| [EmoTest](EmoTest/EmoTest.ino) | Cycle through every face with BOOT; each face speaks a phrase through a MAX98357A |
-| [HelloVoice](HelloVoice/HelloVoice.ino) | Says "Hello world!" through the MAX98357A |
-| [AudioDiag](AudioDiag/AudioDiag.ino) | Tries every I2S pin combination to find a working amplifier wiring |
+| `Shared/DeskLink/test/run.sh` | desk crypto: C++ firmware vs TypeScript app |
+| `Shared/RemoteLink/test/run.sh` | radio frames, replay, pairing |
+| `cd RobotApp && npx tsx tools/smoke.mts localhost:8787 chiku` | app API client against `node tools/mock-robot.mjs` |
+| `cd RobotApp && npx tsx tools/smoke-desk.mts localhost:8790` | desk client against `npx tsx tools/mock-desk.mts` |
+| `python3 Bringup/bringup.py ...` | on the laptop with real boards, see [Bringup/README.md](Bringup/README.md) |
 
-## Board header
-
-```
- TOP ROW:     [5]  [4]  [3]  [2]  [1]  [0]  [3V3] [GND] [5V]      <- USB-C side
- BOTTOM ROW:  [9] [18] [19] [20] [23] [12] [13]  [RXD] [TXD]
-```
-RXD = GPIO17, TXD = GPIO16. GPIO9 is BOOT, GPIO12/13 are USB - don't use them.
-
-## Wiring
-
-| Pin | Connect to |
-|---|---|
-| 0 / 1 | Left hip / right hip servo signal |
-| 2 / 3 | Left foot / right foot servo signal |
-| 4 | MAX98357A BCLK |
-| 5 | MAX98357A LRC |
-| RXD (17) | MAX98357A DIN |
-| 18 | HC-SR04 TRIG |
-| 19 | HC-SR04 ECHO **via 1k/2k voltage divider** (ECHO is 5V) |
-| 20 | TTP223 head SIG |
-| 23 | TTP223 back SIG |
-| 3V3 | TTP223 VCC, MAX98357A SD |
-| 5V | MAX98357A VIN, HC-SR04 VCC |
-| GND | Everything (use a GND rail - the board has only one GND pin) |
-
-- Power the servos from a separate 5V >= 2A supply, sharing GND with the board.
-- MAX98357A: SD must go to 3V3 on many clone boards or the amp stays off. Keep `VOLUME` low for small speakers.
-- Don't use the TF card slot together with audio: it shares GPIO4/5.
-- EmoBot servo calibration: hold BOOT while powering on, all servos go to 90 deg; adjust `trim[]` / `reverse[]`.
-
-## Build & upload
-
-```sh
-arduino-cli core install esp32:esp32
-arduino-cli lib install "GFX Library for Arduino"
-arduino-cli compile --fqbn esp32:esp32:esp32c6:CDCOnBoot=cdc EmoPro
-arduino-cli upload -p /dev/ttyACM0 --fqbn esp32:esp32:esp32c6:CDCOnBoot=cdc EmoPro
-```
-
-## Voices
-
-Voice clips are generated offline with [Piper](https://github.com/rhasspy/piper) (`en_US-lessac-high`) and converted to C arrays:
-
-```sh
-echo "Hello world!" | piper --model en_US-lessac-high.onnx --output_file hello.wav
-python3 EmoTest/tools/make_voices.py HelloVoice/voices.h 1.0 hello=hello.wav
-```
+Each project has its own `docs/` (wiring, testing, security where relevant).
