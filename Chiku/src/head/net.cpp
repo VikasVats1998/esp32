@@ -2,6 +2,7 @@
 #include "net.h"
 #include "config.h"
 #include "logbuf.h"
+#include "desk.h"
 #include "diag.h"
 #include "events.h"
 #include "storage.h"
@@ -97,6 +98,49 @@ static void route(const char* path, HTTPMethod m, std::function<void()> h, std::
   else server.on(path, m, wrapped);
 }
 
+
+// ---------- standing desk accessory ----------
+static void deskJson(JsonObject o) {
+  desk::State s = desk::state();
+  o["paired"] = s.paired;
+  o["host"] = desk::host();
+  o["ok"] = s.ok;
+  o["hv"] = s.hv;
+  o["h"] = s.h;
+  o["moving"] = s.moving;
+  o["dir"] = s.dir;
+  o["armed"] = s.armed;
+  o["travel"] = s.travel;
+  o["src"] = s.src;
+  o["err"] = s.err;
+  o["age"] = s.ageMs == 0xFFFFFFFF ? -1 : (int)s.ageMs;
+}
+
+static void setupDeskRoutes() {
+  route("/api/desk", HTTP_GET, []() { JsonDocument d; deskJson(d.to<JsonObject>()); sendJson(d); });
+  route("/api/desk/pair", HTTP_POST, []() {
+    String host = server.hasArg("host") && server.arg("host").length() ? server.arg("host") : String("desk.local");
+    String err;
+    if (desk::pair(host.c_str(), err)) ok("paired"); else bad(err.c_str());
+  });
+  route("/api/desk/unpair", HTTP_POST, []() { desk::unpair(); ok("unpaired"); });
+  route("/api/desk/cmd", HTTP_POST, []() {
+    String op = server.arg("op");
+    if (!desk::state().paired) { bad("desk not paired"); return; }
+    if (op == "move") {
+      int dir = server.arg("dir") == "up" ? 1 : server.arg("dir") == "down" ? -1 : 0;
+      if (!dir) { bad("dir must be up or down"); return; }
+      desk::moveHold(dir);
+    } else if (op == "stop") { desk::moveHold(0); desk::command("stop"); }
+    else if (op == "preset" || op == "save") desk::command(op.c_str(), server.arg("n").toInt());
+    else if (op == "tap") desk::command("tap", 0, server.arg("key").c_str(), 0, server.arg("ms").toInt());
+    else if (op == "setheight") desk::command("setheight", 0, nullptr, server.arg("h").toFloat());
+    else if (op == "arm") desk::command("arm", server.arg("on") == "1");
+    else { bad("unknown op"); return; }
+    ok(op.c_str());
+  });
+}
+
 static void handleState() {
   Settings& s = storage::get();
   JsonDocument d;
@@ -104,7 +148,8 @@ static void handleState() {
   d["api"] = 1;
   d["fw"] = FW_VERSION;
   JsonArray caps = d["caps"].to<JsonArray>();
-  for (const char* c : {"screens", "alarms", "timers", "weather", "imu", "cam", "pan", "battery", "display_test"}) caps.add(c);
+  for (const char* c : {"screens", "alarms", "timers", "weather", "imu", "cam", "pan", "battery", "display_test", "desk"}) caps.add(c);
+  deskJson(d["desk"].to<JsonObject>());
   d["name"] = ROBOT_NAME;
   d["uptime"] = millis() / 1000;
   d["rssi"] = WiFi.RSSI();
@@ -397,6 +442,7 @@ static void setupTestRoutes() {
 
 static void setupRoutes() {
   setupTestRoutes();
+  setupDeskRoutes();
   route("/api/say", HTTP_POST, []() {
     audio::say(server.arg("key").c_str(), audio::BAB_HAPPY); ok(audio::hasClip(server.arg("key").c_str()) ? "clip" : "babble");
   });
@@ -517,7 +563,7 @@ static void netTask(void*) {
     }
     if (portal) dns.processNextRequest();
     server.handleClient();
-    if (staUp) { ArduinoOTA.handle(); weather::update(); }
+    if (staUp) { ArduinoOTA.handle(); weather::update(); desk::update(); }
     vTaskDelay(pdMS_TO_TICKS(10));
   }
 }

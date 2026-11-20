@@ -19,6 +19,7 @@
 #include "audio.h"
 #include "power.h"
 #include "net.h"
+#include "desk.h"
 #include "selftest.h"
 #include "diag.h"
 
@@ -92,6 +93,7 @@ void setup() {
   bool test = selftest::requested();
   events::init();
   storage::init();
+  desk::init();
   diag::set("filesystem", storage::fsReady(), "LittleFS");
   power::init();
   diag::set("display", display::init(), "ST7789 320x172");

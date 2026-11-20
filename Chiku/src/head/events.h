@@ -36,6 +36,7 @@ enum Type : uint8_t {
   EV_SCREEN,         // a=screen id to show
   EV_POWER,          // a=power state (0 active,1 dim,2 sleep)
   EV_WAKE,
+  EV_DESK,           // a=1 desk rising, 2 lowering, 3 stopped/arrived, 4 desk link lost, 5 paired
   EV_TYPE_COUNT
 };
 

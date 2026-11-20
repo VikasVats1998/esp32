@@ -13,7 +13,7 @@ namespace ui_menu {
 static lv_obj_t* roller;
 // Roller text = every gait name (index = gait id) followed by the extra actions.
 static char options[640];
-static const char* EXTRA[] = {"Avoid mode on", "Avoid mode off", "Mood demo", "Calibrate servos", "Wi-Fi reset", "Reboot"};
+static const char* EXTRA[] = {"Avoid mode on", "Avoid mode off", "Mood demo", "Calibrate servos", "Wi-Fi reset", "Reboot", "Desk control"};
 
 static void onOk(lv_event_t*) {
   uint32_t i = lv_roller_get_selected(roller);
@@ -29,6 +29,7 @@ static void onOk(lv_event_t*) {
     case 3: ui::show(ui::S_CALIB); break;
     case 4: storage::clearWifi(); net::restartWifi(); ui::show(ui::S_FACE); break;
     case 5: ESP.restart(); break;
+    case 6: ui::show(ui::S_DESK); break;
   }
 }
 static void onClose(lv_event_t*) { ui::show(ui::S_FACE); }
@@ -39,7 +40,7 @@ lv_obj_t* create(lv_obj_t* parent) {
   roller = lv_roller_create(p);
   options[0] = 0;
   for (int g = 0; g < motion::G_COUNT; g++) { strlcat(options, motion::gaitName((motion::Gait)g), sizeof(options)); strlcat(options, "\n", sizeof(options)); }
-  for (int k = 0; k < 6; k++) { strlcat(options, EXTRA[k], sizeof(options)); if (k < 5) strlcat(options, "\n", sizeof(options)); }
+  for (int k = 0; k < 7; k++) { strlcat(options, EXTRA[k], sizeof(options)); if (k < 6) strlcat(options, "\n", sizeof(options)); }
   lv_roller_set_options(roller, options, LV_ROLLER_MODE_NORMAL);
   lv_roller_set_visible_row_count(roller, 5);
   lv_obj_set_width(roller, 240);

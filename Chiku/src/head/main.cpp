@@ -27,6 +27,7 @@
 #include "alarm_timer.h"
 #include "weather.h"
 #include "net.h"
+#include "desk.h"
 #include "selftest.h"
 #include "diag.h"
 
@@ -115,6 +116,7 @@ void setup() {
   events::init();
   bus::init();
   storage::init();
+  desk::init();
   diag::set("filesystem", storage::fsReady(), "LittleFS");
   power::init();
   diag::set("pmu", power::pmuOnline(), "AXP2101");

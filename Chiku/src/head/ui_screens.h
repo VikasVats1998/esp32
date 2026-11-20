@@ -10,4 +10,5 @@ namespace ui_sonar    { lv_obj_t* create(lv_obj_t* parent); void update(); }
 namespace ui_camera   { lv_obj_t* create(lv_obj_t* parent); void update(); }
 namespace ui_settings { lv_obj_t* create(lv_obj_t* parent); void update(); }
 namespace ui_menu     { lv_obj_t* create(lv_obj_t* parent); void update(); void onShow(); }
+namespace ui_desk     { lv_obj_t* create(lv_obj_t* parent); void update(); }
 namespace ui_calib    { lv_obj_t* create(lv_obj_t* parent); void update(); void onShow(); void onHide(); }

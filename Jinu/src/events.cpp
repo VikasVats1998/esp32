@@ -13,7 +13,7 @@ static const size_t HIST = 48;
 static Record hist[HIST];
 static uint32_t histCount = 0;
 
-static const char* NAMES[EV_TYPE_COUNT] = {"none", "pad", "button", "dist", "obstacle", "wifi", "settings", "motion", "power", "wake"};
+static const char* NAMES[EV_TYPE_COUNT] = {"none", "pad", "button", "dist", "obstacle", "wifi", "settings", "motion", "power", "wake", "desk"};
 const char* name(Type t) { return t < EV_TYPE_COUNT ? NAMES[t] : "?"; }
 
 void init() { subCount = 0; }

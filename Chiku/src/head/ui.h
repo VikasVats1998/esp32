@@ -8,7 +8,7 @@
 namespace ui {
 enum Screen : uint8_t {
   S_FACE, S_CLOCK, S_WEATHER, S_TIMER, S_SONAR, S_CAMERA, S_SETTINGS,   // swipe order
-  S_MENU, S_CALIB, S_COUNT
+  S_MENU, S_CALIB, S_DESK, S_COUNT
 };
 void init();                           // after display::init()
 void update(uint32_t dtMs);            // UI task, ~30 fps

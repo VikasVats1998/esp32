@@ -1,0 +1,8 @@
+{
+  "name": "DeskLink",
+  "version": "1.0.0",
+  "description": "Secure link between the desk module and Chiku / Jinu / the phone app: ECDH pairing, AES-256-GCM sealed messages bound to a one-time challenge.",
+  "frameworks": "arduino",
+  "platforms": "espressif32",
+  "dependencies": [{ "name": "ArduinoJson", "version": "7.2.1" }]
+}

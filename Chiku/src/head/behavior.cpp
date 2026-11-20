@@ -235,6 +235,16 @@ void onEvent(const events::Event& e) {
       audio::setVolume(storage::get().volume);
       servo::applySettings();
       break;
+    case EV_DESK:                                   // the standing desk moves: react
+      switch (e.a) {
+        case 1: face::setMood(face::M_EXCITED, 0); face::lookAt(0, -0.9f); audio::babble(audio::BAB_HAPPY, 2); break;
+        case 2: face::setMood(face::M_SURPRISED, 0); face::lookAt(0, 0.9f); audio::babble(audio::BAB_QUESTION, 2); break;
+        case 3: face::setMood(face::M_HAPPY, 2000); audio::beep(1200, 60); break;
+        case 4: face::setMood(face::M_SAD, 2000); break;
+        case 5: face::setMood(face::M_LOVE, 2500); audio::say("happy", audio::BAB_HAPPY); break;
+        default: break;
+      }
+      break;
     default: break;
   }
 }

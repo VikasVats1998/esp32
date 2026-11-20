@@ -41,7 +41,7 @@ void show(Screen s) {
     else lv_obj_add_flag(screens[i], LV_OBJ_FLAG_HIDDEN);
   }
   cur = s;
-  touch::setGestures(s != S_MENU && s != S_CALIB);
+  touch::setGestures(s != S_MENU && s != S_CALIB && s != S_DESK);
   if (s == S_MENU) ui_menu::onShow();
   if (s == S_CALIB) ui_calib::onShow();
   if (s != S_FACE) demoOn = false;
@@ -60,6 +60,7 @@ void init() {
   screens[S_SETTINGS] = ui_settings::create(root);
   screens[S_MENU] = ui_menu::create(root);
   screens[S_CALIB] = ui_calib::create(root);
+  screens[S_DESK] = ui_desk::create(root);
 
   ring = lv_arc_create(lv_layer_top());
   lv_obj_set_size(ring, LCD_W, LCD_H);
@@ -122,6 +123,7 @@ void update(uint32_t dtMs) {
       case S_SONAR: ui_sonar::update(); break;
       case S_CAMERA: ui_camera::update(); break;
       case S_SETTINGS: ui_settings::update(); break;
+      case S_DESK: ui_desk::update(); break;
       default: break;
     }
     static uint8_t ringDiv = 0;
@@ -146,7 +148,7 @@ void onEvent(const events::Event& e) {
       }
       break;
     case events::EV_TOUCH_LONG:
-      if (cur != S_MENU && cur != S_CALIB) show(S_MENU);
+      if (cur != S_MENU && cur != S_CALIB && cur != S_DESK) show(S_MENU);
       break;
     case events::EV_SCREEN: show((Screen)e.a); break;
     case events::EV_SETTINGS:
