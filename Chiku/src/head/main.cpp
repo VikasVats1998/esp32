@@ -6,6 +6,7 @@
 #include <Arduino.h>
 #include <esp_task_wdt.h>
 #include "config.h"
+#include "logbuf.h"
 #include "events.h"
 #include "bus.h"
 #include "storage.h"
@@ -27,6 +28,7 @@
 #include "weather.h"
 #include "net.h"
 #include "selftest.h"
+#include "diag.h"
 
 static QueueHandle_t uiQueue;
 
@@ -106,15 +108,22 @@ static void sensorTask(void*) {
 
 void setup() {
   Serial.begin(115200);
+  Serial.setTxTimeoutMs(0);                 // never block when no USB host is connected
+  logbuf::init();
+  LOGI("boot", "%s fw %s, reset reason %d, heap %lu KB", ROBOT_NAME, FW_VERSION, (int)esp_reset_reason(), (unsigned long)(ESP.getFreeHeap() / 1024));
   bool test = FEATURE_SELFTEST && selftest::requested();
   events::init();
   bus::init();
   storage::init();
+  diag::set("filesystem", storage::fsReady(), "LittleFS");
   power::init();
+  diag::set("pmu", power::pmuOnline(), "AXP2101");
+  diag::set("psram", ESP.getPsramSize() > 0, "8 MB expected");
   rtc_time::init();
+  diag::set("rtc", rtc_time::rtcPresent(), "PCF85063");
 
-  if (!display::init()) { Serial.println("display init failed"); }
-  if (!touch::init()) Serial.println("touch init failed");
+  if (!display::init()) { LOGE("boot", "display init failed"); }
+  diag::set("touch", touch::init(), "CST9217");
   ui::init();
   behavior::init();
 
@@ -122,17 +131,17 @@ void setup() {
   motion::init();
   sonar::init();
 #if FEATURE_IMU
-  if (!imu::init()) Serial.println("IMU not found");
+  diag::set("imu", imu::init(), "QMI8658");
 #endif
 #if FEATURE_CAMLINK
   camlink::init();
 #endif
 #if FEATURE_AUDIO
-  if (!audio::init()) Serial.println("audio init failed");
+  diag::set("audio", audio::init(), "ES8311 + I2S");
 #endif
-  if (!pads::init()) Serial.println("PCF8574 (ear/leg pads) not found on GPIO17/18");
+  diag::set("pad_expander", pads::init(), "PCF8574 0x20");
 #if FEATURE_SERVOS
-  if (!servo::init()) Serial.println("PCA9685 not found on GPIO17/18");
+  diag::set("servo_driver", servo::init(), "PCA9685 GPIO17/18");
 #endif
   alarm_timer::init();
   weather::init();
@@ -152,8 +161,8 @@ void setup() {
 
 void loop() {
 #if DEBUG_HEAP_LOG
-  Serial.printf("[heap] free %lu KB, PSRAM free %lu KB, min heap %lu KB\n", (unsigned long)(ESP.getFreeHeap() / 1024),
-                (unsigned long)(ESP.getFreePsram() / 1024), (unsigned long)(ESP.getMinFreeHeap() / 1024));
+  LOGI("heap", "free %lu KB, PSRAM free %lu KB, min heap %lu KB", (unsigned long)(ESP.getFreeHeap() / 1024),
+       (unsigned long)(ESP.getFreePsram() / 1024), (unsigned long)(ESP.getMinFreeHeap() / 1024));
 #endif
   vTaskDelay(pdMS_TO_TICKS(60000));
 }

@@ -1,6 +1,7 @@
 // sonar.cpp - see sonar.h
 #include "sonar.h"
 #include "config.h"
+#include "logbuf.h"
 #include "events.h"
 
 namespace sonar {

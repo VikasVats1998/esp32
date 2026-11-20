@@ -2,6 +2,8 @@
 // Runs in its own low priority task.
 #include "net.h"
 #include "config.h"
+#include "logbuf.h"
+#include "diag.h"
 #include "events.h"
 #include "storage.h"
 #include "servo.h"
@@ -61,7 +63,33 @@ static void sendJson(JsonDocument& d, int code = 200) {
   serializeJson(d, out);
   server.send(code, "application/json", out);
 }
-static void ok() { server.send(200, "application/json", "{\"ok\":true}"); }
+static void ok(const char* msg = nullptr) {
+  JsonDocument d;
+  d["ok"] = true;
+  if (msg) d["msg"] = msg;
+  sendJson(d);
+}
+static void bad(const char* msg) {
+  LOGW("api", "400 %s", msg);
+  server.send(400, "text/plain", msg);
+}
+
+// Every API call is logged (what the app sent), except the polling calls.
+static void logRequest() {
+  char args[100] = "";
+  for (int i = 0; i < server.args() && strlen(args) < 80; i++) {
+    size_t used = strlen(args);
+    if (server.argName(i) == "plain") snprintf(args + used, sizeof(args) - used, " <json body>");
+    else snprintf(args + used, sizeof(args) - used, " %s=%s", server.argName(i).c_str(), server.arg(i).c_str());
+  }
+  LOGI("api", "%s %s%s", server.method() == HTTP_GET ? "GET" : "POST", server.uri().c_str(), args);
+}
+static void route(const char* path, HTTPMethod m, std::function<void()> h, std::function<void()> up = nullptr) {
+  bool quiet = !strcmp(path, "/api/state") || !strcmp(path, "/api/events") || !strcmp(path, "/api/log") || !strcmp(path, "/api/diag");
+  auto wrapped = [h, quiet]() { if (!quiet) logRequest(); h(); };
+  if (up) server.on(path, m, wrapped, up);
+  else server.on(path, m, wrapped);
+}
 
 static void handleState() {
   Settings& s = storage::get();
@@ -100,7 +128,7 @@ static void handleState() {
 
 static void handleSet() {
   JsonDocument d;
-  if (deserializeJson(d, server.arg("plain"))) { server.send(400, "text/plain", "bad json"); return; }
+  if (deserializeJson(d, server.arg("plain"))) { bad("bad json"); return; }
   Settings& s = storage::get();
   if (d["brightness"].is<int>()) s.brightness = constrain((int)d["brightness"], 5, 255);
   if (d["volume"].is<int>()) s.volume = constrain((int)d["volume"], 0, 100);
@@ -124,9 +152,9 @@ static void handleMotion() {
   motion::Gait g;
   if (server.hasArg("avoid")) { motion::setAvoidMode(server.arg("avoid") == "1"); ok(); return; }
   if (server.hasArg("stop")) { motion::stop(); ok(); return; }
-  if (!motion::gaitFromName(server.arg("g").c_str(), g)) { server.send(400, "text/plain", "unknown gait"); return; }
+  if (!motion::gaitFromName(server.arg("g").c_str(), g)) { bad("unknown gait"); return; }
   events::publish(events::EV_MOTION_CMD, g, server.hasArg("n") ? server.arg("n").toInt() : 4);
-  ok();
+  ok(motion::gaitName(g));
 }
 
 static void handleWifiSave() {
@@ -161,12 +189,13 @@ static void handleRoot() {
 static void handleUpdateUpload() {
   HTTPUpload& up = server.upload();
   if (up.status == UPLOAD_FILE_START) {
+    LOGW("ota", "firmware upload started: %s", up.filename.c_str());
     face::setMood(face::M_LISTENING, 0);
     Update.begin(UPDATE_SIZE_UNKNOWN);
   } else if (up.status == UPLOAD_FILE_WRITE) {
     Update.write(up.buf, up.currentSize);
   } else if (up.status == UPLOAD_FILE_END) {
-    Update.end(true);
+    LOGI("ota", "upload finished, %u bytes, %s", (unsigned)up.totalSize, Update.end(true) ? "OK" : Update.errorString());
   }
 }
 
@@ -202,6 +231,41 @@ static void handleEvents() {
   sendJson(d);
 }
 
+static void handleLog() {
+  static logbuf::Line rec[60];
+  uint32_t next = 0;
+  size_t n = logbuf::read(server.arg("since").toInt(), rec, 60, next);
+  JsonDocument d;
+  d["next"] = next;
+  JsonArray a = d["lines"].to<JsonArray>();
+  for (size_t i = 0; i < n; i++) {
+    JsonObject o = a.add<JsonObject>();
+    o["n"] = rec[i].n; o["t"] = rec[i].ms; o["l"] = rec[i].lvl; o["m"] = rec[i].msg;
+  }
+  sendJson(d);
+}
+
+
+// ---------- hardware diagnostics (GET /api/diag) ----------
+static void addLive(JsonArray& a, const char* name, bool ok, const String& detail) {
+  JsonObject o = a.add<JsonObject>();
+  o["name"] = name; o["ok"] = ok; o["detail"] = detail; o["live"] = true;
+}
+
+static void handleDiag() {
+  JsonDocument d;
+  JsonArray a = d["items"].to<JsonArray>();
+  for (size_t i = 0; i < diag::count(); i++) {         // results of the start-up checks
+    JsonObject o = a.add<JsonObject>();
+    o["name"] = diag::item(i).name; o["ok"] = diag::item(i).ok; o["detail"] = diag::item(i).detail; o["live"] = false;
+  }
+  addLive(a, "sonar", sonar::distanceCm() > 0, sonar::distanceCm() > 0 ? String(sonar::distanceCm()) + " cm" : "no echo (check ECHO divider)");
+  addLive(a, "wifi", WiFi.status() == WL_CONNECTED, String(WiFi.RSSI()) + " dBm");
+  d["heap"] = ESP.getFreeHeap();
+  d["uptime"] = millis() / 1000;
+  sendJson(d);
+}
+
 static void handleSim() {                                   // pretend a sensor event happened
   if (server.hasArg("pad")) {
     events::publish(events::EV_PAD, server.arg("pad").toInt(), server.hasArg("g") ? server.arg("g").toInt() : 1);
@@ -210,7 +274,7 @@ static void handleSim() {                                   // pretend a sensor 
   String ev = server.arg("ev");
   if (ev == "obstacle") events::publish(events::EV_OBSTACLE, 8);
   else if (ev == "button") events::publish(events::EV_BUTTON, 1);
-  else { server.send(400, "text/plain", "unknown ev"); return; }
+  else { bad("unknown ev"); return; }
   ok();
 }
 
@@ -228,51 +292,58 @@ static void handleVoiceList() {
 }
 
 static void setupTestRoutes() {
-  server.on("/api/events", HTTP_GET, handleEvents);
-  server.on("/api/sim", HTTP_POST, handleSim);
-  server.on("/api/voice/list", HTTP_GET, handleVoiceList);
-  server.on("/api/mode", HTTP_POST, []() {
+  route("/api/events", HTTP_GET, handleEvents);
+  route("/api/log", HTTP_GET, handleLog);
+  route("/api/diag", HTTP_GET, handleDiag);
+  route("/api/sim", HTTP_POST, handleSim);
+  route("/api/voice/list", HTTP_GET, handleVoiceList);
+  route("/api/mode", HTTP_POST, []() {
     behavior::Mode m;
-    if (!behavior::modeFromName(server.arg("m").c_str(), m)) { server.send(400, "text/plain", "auto|manual|explore"); return; }
-    behavior::setMode(m); ok();
+    if (!behavior::modeFromName(server.arg("m").c_str(), m)) { bad("auto|manual|explore"); return; }
+    behavior::setMode(m); ok(behavior::modeName(m));
   });
-  server.on("/api/mute", HTTP_POST, []() { audio::setMuted(server.arg("on") == "1"); ok(); });
-  server.on("/api/servo/set", HTTP_POST, []() {
+  route("/api/mute", HTTP_POST, []() { audio::setMuted(server.arg("on") == "1"); ok(); });
+  route("/api/servo/set", HTTP_POST, []() {
     servo::setTarget(server.arg("ch").toInt(), server.arg("deg").toFloat(), server.hasArg("speed") ? server.arg("speed").toFloat() : 90);
-    ok();
+    char m[40]; snprintf(m, sizeof(m), "servo %ld -> %ld", (long)server.arg("ch").toInt(), (long)server.arg("deg").toInt()); ok(m);
   });
-  server.on("/api/servo/release", HTTP_POST, []() { servo::releaseAll(); ok(); });
-  server.on("/api/beep", HTTP_POST, []() {
+  route("/api/servo/release", HTTP_POST, []() { servo::releaseAll(); ok(); });
+  route("/api/beep", HTTP_POST, []() {
     audio::beep(constrain((int)server.arg("hz").toInt(), 100, 8000), constrain((int)server.arg("ms").toInt(), 10, 3000)); ok();
   });
-  server.on("/api/melody", HTTP_POST, []() {
+  route("/api/melody", HTTP_POST, []() {
     audio::play((audio::Melody)constrain((int)server.arg("id").toInt(), 0, audio::MEL_COUNT - 1), server.arg("loop") == "1"); ok();
   });
-  server.on("/api/audio/stop", HTTP_POST, []() { audio::stop(); ok(); });
-  server.on("/api/look", HTTP_POST, []() { face::lookAt(server.arg("x").toFloat(), server.arg("y").toFloat()); ok(); });
-  server.on("/api/display", HTTP_POST, []() { face::setTestPattern(server.arg("p").toInt()); ok(); });
-  server.on("/api/reboot", HTTP_POST, []() { ok(); delay(200); ESP.restart(); });
+  route("/api/audio/stop", HTTP_POST, []() { audio::stop(); ok(); });
+  route("/api/look", HTTP_POST, []() { face::lookAt(server.arg("x").toFloat(), server.arg("y").toFloat()); ok(); });
+  route("/api/led", HTTP_POST, []() {                       // RGB LED test: r,g,b 0-255, or off=1 to follow the mood again
+    if (server.hasArg("off")) face::setLedOverride(-1);
+    else face::setLedOverride(((int)server.arg("r").toInt() << 16) | ((int)server.arg("g").toInt() << 8) | (int)server.arg("b").toInt());
+    ok();
+  });
+  route("/api/display", HTTP_POST, []() { face::setTestPattern(server.arg("p").toInt()); ok(); });
+  route("/api/reboot", HTTP_POST, []() { ok(); delay(200); ESP.restart(); });
 }
 
 static void setupRoutes() {
   setupTestRoutes();
-  server.on("/", HTTP_GET, handleRoot);
-  server.on("/api/state", HTTP_GET, handleState);
-  server.on("/api/set", HTTP_POST, handleSet);
-  server.on("/api/motion", HTTP_POST, handleMotion);
-  server.on("/api/wifi", HTTP_POST, handleWifiSave);
-  server.on("/api/scan", HTTP_GET, handleScan);
-  server.on("/api/wifi/reset", HTTP_POST, []() { storage::clearWifi(); ok(); restartReq = true; });
-  server.on("/api/say", HTTP_POST, []() { audio::say(server.arg("key").c_str(), audio::BAB_HAPPY); ok(); });
-  server.on("/api/voice", HTTP_POST, []() { server.send(200, "text/plain", "uploaded"); }, handleVoiceUpload);
-  server.on("/api/servo/test", HTTP_POST, []() {
+  route("/", HTTP_GET, handleRoot);
+  route("/api/state", HTTP_GET, handleState);
+  route("/api/set", HTTP_POST, handleSet);
+  route("/api/motion", HTTP_POST, handleMotion);
+  route("/api/wifi", HTTP_POST, handleWifiSave);
+  route("/api/scan", HTTP_GET, handleScan);
+  route("/api/wifi/reset", HTTP_POST, []() { storage::clearWifi(); ok(); restartReq = true; });
+  route("/api/say", HTTP_POST, []() { audio::say(server.arg("key").c_str(), audio::BAB_HAPPY); ok(audio::hasClip(server.arg("key").c_str()) ? "clip" : "babble"); });
+  route("/api/voice", HTTP_POST, []() { server.send(200, "text/plain", "uploaded"); }, handleVoiceUpload);
+  route("/api/servo/test", HTTP_POST, []() {
     servo::setTarget(server.arg("ch").toInt(), server.arg("deg").toFloat(), 60); servo::hold(server.arg("ch").toInt()); ok();
   });
-  server.on("/api/mood", HTTP_POST, []() {
+  route("/api/mood", HTTP_POST, []() {
     face::setMood((face::Mood)constrain((int)server.arg("m").toInt(), 0, face::MOOD_COUNT - 1), server.hasArg("hold") ? server.arg("hold").toInt() : 5000); ok();
   });
-  server.on("/update", HTTP_GET, []() { server.send_P(200, "text/html", UPDATE_PAGE); });
-  server.on("/update", HTTP_POST, []() {
+  route("/update", HTTP_GET, []() { server.send_P(200, "text/html", UPDATE_PAGE); });
+  route("/update", HTTP_POST, []() {
     server.send(200, "text/plain", Update.hasError() ? "FAILED" : "OK, rebooting");
     delay(300);
     ESP.restart();
@@ -287,6 +358,7 @@ static void setupRoutes() {
 // ---------- connection handling ----------
 static void startPortal() {
   portal = true;
+  LOGW("wifi", "no Wi-Fi: setup portal \"%s\" (192.168.4.1)", AP_SSID);
   WiFi.mode(WIFI_AP_STA);
   WiFi.softAP(AP_SSID);
   dns.start(53, "*", WiFi.softAPIP());
@@ -313,6 +385,7 @@ static bool connectSta(uint32_t timeoutMs) {
 
 static void onConnected() {
   staUp = true;
+  LOGI("wifi", "connected to %s, IP %s, RSSI %d", WiFi.SSID().c_str(), WiFi.localIP().toString().c_str(), WiFi.RSSI());
   strlcpy(ipStr, WiFi.localIP().toString().c_str(), sizeof(ipStr));
   WiFi.setSleep(true);                                  // modem sleep saves power
   stopPortal();

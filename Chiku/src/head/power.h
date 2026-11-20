@@ -12,6 +12,7 @@ void activity();                // call on any user interaction
 State state();
 int batteryPercent();           // -1 = no battery
 bool charging();
+bool pmuOnline();
 float batteryVolts();
 void keepAwake(bool on);        // alarm ringing etc: never sleep
 }  // namespace power

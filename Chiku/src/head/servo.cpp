@@ -1,6 +1,7 @@
 // servo.cpp - see servo.h
 #include "servo.h"
 #include "config.h"
+#include "logbuf.h"
 #include "storage.h"
 #include "bus.h"
 #include <Wire.h>
@@ -51,12 +52,14 @@ static void channelOff(uint8_t c) {
 
 static void chipSleep() {
   if (asleep) return;
+  LOGI("servo", "idle: outputs off, PCA9685 sleep");
   write8(MODE1, 0x10);                  // SLEEP bit, oscillator off
   asleep = true;
 }
 
 static void chipWake() {
   if (!asleep) return;
+  LOGI("servo", "PCA9685 wake");
   write8(MODE1, 0x20);                  // auto-increment, oscillator on
   delay(1);                             // oscillator needs 500 us
   write8(MODE1, 0xA0);                  // restart

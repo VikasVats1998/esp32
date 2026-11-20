@@ -1,6 +1,7 @@
 // behavior.cpp - see behavior.h
 #include "behavior.h"
 #include "config.h"
+#include "logbuf.h"
 #include "face.h"
 #include "audio.h"
 #include "motion.h"
@@ -41,6 +42,7 @@ static void onPad(int pad, int gesture) {
   using namespace pads;
   uint32_t now = millis();
   lastTouch = now;
+  LOGI("pad", "pad %d gesture %d (affection %d, annoyance %d)", pad, gesture, (int)affection, (int)annoyance);
   int side = (pad == PAD_HEAD_L || pad == PAD_LEG_L) ? -1 : 1;
   bool head = pad == PAD_HEAD_L || pad == PAD_HEAD_R;
   bool leg = pad == PAD_LEG_L || pad == PAD_LEG_R;
@@ -55,6 +57,7 @@ static void onPad(int pad, int gesture) {
   }
   if (leg && annoyance > 95) {                                 // poked too often: cross, then ruthna
     annoyance = 40;
+    LOGI("feel", "too many pokes: angry, then sulk");
     emote(face::M_ANGRY, 2500, motion::G_ANGRY, 3, audio::BAB_ANGRY, "angry");
     nextIdle = now + 9000;
     return;
@@ -114,6 +117,7 @@ static void onDistance(int cm) {
 static void idleLife(uint32_t now) {
   if (now < nextIdle || now < calmUntil || power::state() != power::ACTIVE || motion::busy()) return;
   nextIdle = now + random(25000, 50000);
+  LOGD("idle", "idle life action");
   if (lastTouch && now - lastTouch > 120000UL) {               // ignored for 2 minutes: lonely
     face::setMood(face::M_SAD, 3500);
     audio::babble(audio::BAB_SAD, 2);
@@ -140,6 +144,7 @@ bool modeFromName(const char* s, Mode& out) {
   return false;
 }
 void setMode(Mode m) {
+  LOGI("mode", "%s -> %s", modeName(curMode), modeName(m));
   curMode = m;
   motion::setAvoidMode(m == MODE_EXPLORE);
   power::keepAwake(m == MODE_MANUAL);          // never dim or sleep while testing by hand

@@ -1,6 +1,7 @@
 // servo.cpp - see servo.h
 #include "servo.h"
 #include "config.h"
+#include "logbuf.h"
 #include "storage.h"
 #include <math.h>
 
@@ -87,7 +88,11 @@ void update(uint32_t dtMs) {
   if (now - lastMoveMs > SERVO_IDLE_OFF_MS && !moving()) releaseAll();
 }
 
-void releaseAll() { for (uint8_t c = 0; c < SERVO_COUNT; c++) release(c); }
+void releaseAll() {
+  bool any = false;
+  for (auto& s : ch) any |= s.on;
+  if (any) LOGI("servo", "idle: PWM released");
+  for (uint8_t c = 0; c < SERVO_COUNT; c++) release(c); }
 
 void hold(uint8_t c) {
   if (c >= SERVO_COUNT) return;

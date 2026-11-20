@@ -1,6 +1,7 @@
 // pads.cpp - see pads.h (same gesture logic as Chiku)
 #include "pads.h"
 #include "config.h"
+#include "logbuf.h"
 #include <Wire.h>
 #include "events.h"
 

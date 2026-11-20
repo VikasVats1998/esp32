@@ -204,6 +204,10 @@ void update(uint32_t dtMs) {
   display::flush();
 }
 
-uint32_t ledColor() { return ((uint32_t)cr << 16) | ((uint32_t)cg << 8) | (uint32_t)cb; }
+static volatile int32_t ledOverride = -1;
+void setLedOverride(int32_t rgb) { ledOverride = rgb; }
+uint32_t ledColor() {
+  if (ledOverride >= 0) return (uint32_t)ledOverride;
+  return ((uint32_t)cr << 16) | ((uint32_t)cg << 8) | (uint32_t)cb; }
 
 }  // namespace face

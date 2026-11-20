@@ -1,6 +1,7 @@
 // motion.cpp - see motion.h
 #include "motion.h"
 #include "config.h"
+#include "logbuf.h"
 #include "events.h"
 #include "servo.h"
 #include <math.h>
@@ -82,12 +83,14 @@ void start(Gait g, uint8_t cycles) {
 void stop() { reqGait = G_HOME; reqCycles = 1; reqFlag = true; }
 bool busy() { return running; }
 Gait current() { return gait; }
-void setAvoidMode(bool on) { avoid = on; avoidStep = 0; if (!on) stop(); }
+void setAvoidMode(bool on) {
+  LOGI("motion", "explore mode %s", on ? "on" : "off"); avoid = on; avoidStep = 0; if (!on) stop(); }
 bool avoidMode() { return avoid; }
 void setFollowLook(bool on) { followLook = on; }
 void lookPan(float x) { panTarget = constrain(90.f + x * 35.f, 20.f, 160.f); }
 
 static void begin(Gait g, uint8_t cycles) {
+  LOGI("motion", "start %s x%u", GAITS[g].name, cycles);
   gait = g;
   t = 0;
   totalMs = GAITS[g].period * (cycles ? cycles : 1);
@@ -99,6 +102,7 @@ static void begin(Gait g, uint8_t cycles) {
 }
 
 static void endGait() {
+  LOGI("motion", "end %s", GAITS[gait].name);
   running = false;
   for (int i = 0; i < 4; i++) servo::setTarget(HW[i], 90, 150);
 }
@@ -108,6 +112,7 @@ static void handleEvents() {
   while (xQueueReceive(q, &e, 0) == pdTRUE) {
     switch (e.type) {
       case events::EV_FALL:
+        LOGW("motion", "FALL: servos released");
         avoid = false;
         running = false;
         servo::freeze();                   // stop servos, release
@@ -156,6 +161,7 @@ void update(uint32_t dtMs) {
     t += dtMs;
     // Safety: walking forward and something is too close
     if (gait == G_WALK && lastDist > 0 && lastDist < OBSTACLE_STOP_CM) {
+      LOGW("motion", "obstacle at %d cm: stop walking", lastDist);
       running = false; endGait(); avoidUntil = now + 600;
     } else if (t >= totalMs) {
       endGait();

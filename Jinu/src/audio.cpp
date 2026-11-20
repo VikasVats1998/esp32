@@ -1,6 +1,7 @@
 // audio.cpp - see audio.h. MAX98357A amplifier over I2S (no codec chip to configure).
 #include "audio.h"
 #include "config.h"
+#include "logbuf.h"
 #include "storage.h"
 #include <ESP_I2S.h>
 #include <LittleFS.h>
@@ -48,7 +49,7 @@ static const Tune TUNES[MEL_COUNT] = {TUNE(M_STARTUP), TUNE(M_ALARM), TUNE(M_HAP
                                       TUNE(M_PET), TUNE(M_TIMER), TUNE(M_DIZZY), TUNE(M_CLICK)};
 
 static volatile bool mutedFlag = false;
-void setMuted(bool on) { mutedFlag = on; if (on) stop(); }
+void setMuted(bool on) { LOGI("audio", "mute %s", on ? "on" : "off"); mutedFlag = on; if (on) stop(); }
 bool muted() { return mutedFlag; }
 void setVolume(uint8_t p) { volume = constrain(p, 0, 100); }
 bool online() { return ok; }
@@ -147,7 +148,8 @@ bool playWav(const char* path) {
 void say(const char* key, Babble fallback) {
   char p[48];
   snprintf(p, sizeof(p), "/voice/%s.wav", key);
-  if (!playWav(p)) babble(fallback);
+  if (playWav(p)) LOGI("audio", "say clip %s", key);
+  else { LOGW("audio", "say %s: no clip (or muted) -> babble", key); babble(fallback); }
 }
 
 // Play a canonical 44-byte-header PCM16 WAV (mono or stereo, 16 kHz).

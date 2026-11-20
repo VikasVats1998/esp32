@@ -6,6 +6,7 @@
 #include <Arduino.h>
 #include <esp_task_wdt.h>
 #include "config.h"
+#include "logbuf.h"
 #include "events.h"
 #include "storage.h"
 #include "display.h"
@@ -19,6 +20,7 @@
 #include "power.h"
 #include "net.h"
 #include "selftest.h"
+#include "diag.h"
 
 static QueueHandle_t faceQueue;
 
@@ -84,17 +86,21 @@ static void sensorTask(void*) {
 
 void setup() {
   Serial.begin(115200);
+  Serial.setTxTimeoutMs(0);                 // never block when no USB host is connected
+  logbuf::init();
+  LOGI("boot", "%s fw %s, reset reason %d, heap %lu KB", ROBOT_NAME, FW_VERSION, (int)esp_reset_reason(), (unsigned long)(ESP.getFreeHeap() / 1024));
   bool test = selftest::requested();
   events::init();
   storage::init();
+  diag::set("filesystem", storage::fsReady(), "LittleFS");
   power::init();
-  if (!display::init()) Serial.println("display init failed");
+  diag::set("display", display::init(), "ST7789 320x172");
   face::init();
   faceQueue = events::subscribe(32);
   motion::init();
   sonar::init();
-  if (!pads::init()) Serial.println("PCF8574 (touch pads) not found on GPIO20/23");
-  if (!audio::init()) Serial.println("audio init failed");
+  diag::set("pad_expander", pads::init(), "PCF8574 0x20");
+  diag::set("audio", audio::init(), "I2S + MAX98357A");
   servo::init();
   if (test) selftest::run();                                  // never returns
   behavior::init();
@@ -108,7 +114,7 @@ void setup() {
 
 void loop() {
 #if DEBUG_HEAP_LOG
-  Serial.printf("[heap] free %lu KB, min %lu KB\n", (unsigned long)(ESP.getFreeHeap() / 1024), (unsigned long)(ESP.getMinFreeHeap() / 1024));
+  LOGI("heap", "free %lu KB, min %lu KB", (unsigned long)(ESP.getFreeHeap() / 1024), (unsigned long)(ESP.getMinFreeHeap() / 1024));
 #endif
   vTaskDelay(pdMS_TO_TICKS(60000));
 }

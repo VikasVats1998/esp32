@@ -1,6 +1,7 @@
 // power.cpp - see power.h
 #include "power.h"
 #include "config.h"
+#include "logbuf.h"
 #include "bus.h"
 #include "events.h"
 #define XPOWERS_CHIP_AXP2101
@@ -21,6 +22,7 @@ static uint32_t lastBatt = 0;
 static void setState(State s) {
   if (s == st) return;
   st = s;
+  LOGI("power", "state -> %s", s == ACTIVE ? "active" : s == DIM ? "dim" : "sleep");
   setCpuFrequencyMhz(s == SLEEP ? 80 : 160);      // slower CPU while sleeping
   events::publish(events::EV_POWER, s);
 }
@@ -47,6 +49,7 @@ void keepAwake(bool on) { awake = on; if (on) activity(); }
 State state() { return st; }
 int batteryPercent() { return pct; }
 bool charging() { return chg; }
+bool pmuOnline() { return pmuOk; }
 float batteryVolts() { return volts; }
 
 void update() {

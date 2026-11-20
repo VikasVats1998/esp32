@@ -1,6 +1,7 @@
 // camlink.cpp - see camlink.h
 #include "camlink.h"
 #include "config.h"
+#include "logbuf.h"
 #include "events.h"
 #include "storage.h"
 #include <ArduinoJson.h>
@@ -69,6 +70,7 @@ static void handleLine(const char* s) {
     if (st.ssid[0]) sendWifi(st.ssid, st.pass);         // share Wi-Fi with the cam
   } else if (!strcmp(evt, "ip")) {
     strlcpy(ipStr, d["ip"] | "", sizeof(ipStr));
+    LOGI("cam", "ip %s", ipStr);
   } else if (!strcmp(evt, "snap")) {
     snapBytes = d["len"] | 0;
   } else if (!strcmp(evt, "cam")) {
@@ -90,6 +92,7 @@ void update() {
   bool a = alive();
   if (a != wasAlive) {
     wasAlive = a;
+    LOGI("cam", "link %s", a ? "alive" : "lost");
     events::publish(events::EV_CAM_STATE, a ? 1 : 0);
   }
   // Ask for the IP every 10 s until we know it

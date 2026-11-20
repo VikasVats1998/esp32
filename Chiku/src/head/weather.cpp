@@ -1,6 +1,7 @@
 // weather.cpp - see weather.h
 #include "weather.h"
 #include "config.h"
+#include "logbuf.h"
 #include "events.h"
 #include "storage.h"
 #include <WiFi.h>
@@ -74,7 +75,8 @@ void update() {
   if (!forceNow && lastTry && now - lastTry < period) return;
   forceNow = false;
   lastTry = now ? now : 1;
-  if (fetch()) events::publish(events::EV_WEATHER);
+  if (fetch()) { LOGI("weather", "%.1f C code %d", W.temp, W.code); events::publish(events::EV_WEATHER); }
+  else LOGW("weather", "fetch failed (will retry)");
 }
 
 }  // namespace weather

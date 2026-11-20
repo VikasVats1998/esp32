@@ -1,6 +1,7 @@
 // power.cpp - see power.h
 #include "power.h"
 #include "config.h"
+#include "logbuf.h"
 #include "events.h"
 
 namespace power {
@@ -11,6 +12,7 @@ static volatile bool awake = false;
 static void setState(State s) {
   if (s == st) return;
   st = s;
+  LOGI("power", "state -> %s", s == ACTIVE ? "active" : s == DIM ? "dim" : "sleep");
   setCpuFrequencyMhz(s == SLEEP ? 80 : 160);       // slower CPU while asleep
   events::publish(events::EV_POWER, s);
 }

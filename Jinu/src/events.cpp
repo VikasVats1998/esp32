@@ -1,5 +1,6 @@
 // events.cpp - see events.h
 #include "events.h"
+#include "logbuf.h"
 
 namespace events {
 
@@ -46,6 +47,7 @@ bool publish(Type type, int32_t a, int32_t b) {
     hist[histCount % HIST] = {histCount + 1, millis(), type, a, b};
     histCount++;
     portEXIT_CRITICAL(&mux);
+    logbuf::log(logbuf::L_INFO, "event", "%s a=%ld b=%ld", name(type), (long)a, (long)b);
   }
   for (uint8_t i = 0; i < subCount; i++) {
     if (xQueueSend(subs[i], &e, 0) != pdTRUE) ok = false;

@@ -1,6 +1,7 @@
 // behavior.cpp - see behavior.h. Edit this file to change how Chiku reacts.
 #include "behavior.h"
 #include "config.h"
+#include "logbuf.h"
 #include "face.h"
 #include "audio.h"
 #include "motion.h"
@@ -67,6 +68,7 @@ static void emote(face::Mood m, uint32_t faceMs, motion::Gait g, uint8_t cycles,
 static void onPad(int pad, int gesture) {
   uint32_t now = millis();
   lastTouch = now;
+  LOGI("pad", "pad %d gesture %d (affection %d, annoyance %d)", pad, gesture, (int)affection, (int)annoyance);
   using namespace pads;
   int side = (pad == PAD_EAR_L || pad == PAD_LEG_L) ? -1 : 1;
   bool ear = pad == PAD_EAR_L || pad == PAD_EAR_R;
@@ -84,6 +86,7 @@ static void onPad(int pad, int gesture) {
   // Pushed too far: legs poked again and again -> cross, then ruthna (sulk)
   if (leg && annoyance > 95) {
     annoyance = 40;
+    LOGI("feel", "too many pokes: angry, then sulk");
     emote(face::M_ANGRY, 2500, motion::G_ANGRY, 3, audio::BAB_ANGRY, "angry");
     nextIdle = now + 9000;
     stopMoveAt = 0;
@@ -129,6 +132,7 @@ static void idleLife(uint32_t now) {
   if (now < nextIdle || now < calmUntil) return;
   if (power::state() != power::ACTIVE || alarm_timer::ringing() || ui::current() != ui::S_FACE) return;
   nextIdle = now + random(25000, 50000);
+  LOGD("idle", "idle life action");
   // Ignored for a long time: lonely
   if (lastTouch && now - lastTouch > 120000UL) {
     face::setMood(face::M_SAD, 3500);
@@ -156,6 +160,7 @@ bool modeFromName(const char* s, Mode& out) {
   return false;
 }
 void setMode(Mode m) {
+  LOGI("mode", "%s -> %s", modeName(curMode), modeName(m));
   curMode = m;
   motion::setAvoidMode(m == MODE_EXPLORE);
   motion::setFollowLook(m != MODE_MANUAL);

@@ -1,6 +1,7 @@
 // pads.cpp - see pads.h
 #include "pads.h"
 #include "config.h"
+#include "logbuf.h"
 #include "bus.h"
 #include "events.h"
 

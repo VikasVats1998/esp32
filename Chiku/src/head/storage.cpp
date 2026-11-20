@@ -1,5 +1,6 @@
 // storage.cpp - see storage.h
 #include "storage.h"
+#include "logbuf.h"
 #include <Preferences.h>
 #include <LittleFS.h>
 
@@ -41,6 +42,7 @@ void init() {
 Settings& get() { return S; }
 
 void save() {
+  LOGI("storage", "settings saved");
   prefs.putString("ssid", S.ssid);
   prefs.putString("pass", S.pass);
   prefs.putFloat("lat", S.lat);
