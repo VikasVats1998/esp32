@@ -1,0 +1,8 @@
+{
+  "name": "RemoteLink",
+  "version": "1.0.0",
+  "description": "Authenticated radio frames (ESP-NOW) between the gimbal remote and the gimbal module: HMAC tag, replay protection, ECDH pairing.",
+  "frameworks": "arduino",
+  "platforms": "espressif32",
+  "dependencies": [{ "name": "DeskLink", "version": "*" }]
+}

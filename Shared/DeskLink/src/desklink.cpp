@@ -74,6 +74,8 @@ static bool hmac(const uint8_t* key, size_t kl, const uint8_t* data, size_t dl, 
   return mbedtls_md_hmac(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), key, kl, data, dl, out) == 0;
 }
 
+bool hmacSha256(const uint8_t* key, size_t keyLen, const uint8_t* data, size_t dataLen, uint8_t out[32]) { return hmac(key, keyLen, data, dataLen, out); }
+
 std::string sha256(const std::string& data) {
   uint8_t out[32];
   mbedtls_md(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), reinterpret_cast<const uint8_t*>(data.data()), data.size(), out);

@@ -56,6 +56,8 @@ bool fromHex(const std::string& hex, std::array<uint8_t, N>& out) {
   return true;
 }
 std::string sha256(const std::string& data);
+// HMAC-SHA256 (32 byte tag)
+bool hmacSha256(const uint8_t* key, size_t keyLen, const uint8_t* data, size_t dataLen, uint8_t out[32]);
 bool constantTimeEqual(const uint8_t* a, const uint8_t* b, size_t n);
 
 // ---- server side: one-time challenges ----
