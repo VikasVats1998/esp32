@@ -130,5 +130,16 @@ check('checklist has tests for every servo', tests.filter((t) => t.id.startsWith
 check('checklist has 5 pad tests', tests.filter((t) => /^pad_\d$/.test(t.id)).length === 5);
 void lastTraffic; void sonarRange;
 
+// ---- robot desk endpoints are protected by a token
+const tok = 'test-token-1234567890';
+check('desk pair needs a token', (await fetch(`http://${host}/api/desk/pair?host=desk.local`, { method: 'POST' })).status === 400);
+check('desk pair with token', (await c.deskPair('desk.local', tok)).ok === true);
+check('desk cmd without token is refused', (await fetch(`http://${host}/api/desk/cmd?op=stop`, { method: 'POST' })).status === 401);
+check('desk cmd with wrong token is refused', (await fetch(`http://${host}/api/desk/cmd?op=stop&token=nope`, { method: 'POST' })).status === 401);
+check('desk cmd with token works', (await c.deskCmd(tok, 'stop')).ok === true);
+check('desk state visible on the robot', (await c.state()).desk?.paired === true);
+check('unpair needs the token', (await fetch(`http://${host}/api/desk/unpair`, { method: 'POST' })).status === 401);
+await c.deskUnpair(tok);
+
 console.log(failed ? `\n${failed} FAILED` : '\nall passed');
 process.exit(failed ? 1 : 0);

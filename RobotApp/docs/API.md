@@ -63,3 +63,16 @@ Pad ids: Chiku 0 ear L, 1 ear R, 2 leg L, 3 leg R, 4 body. Jinu 0 head L, 1 head
 | `POST /api/voice` (multipart, a `*.wav` file) | upload a clip (16 kHz 16-bit mono) |
 | `POST /update` (multipart, file field `fw`, a .bin) | OTA firmware update |
 | `POST /api/wifi` (form `ssid`, `pass`) | set Wi-Fi (setup portal) |
+
+## Desk accessory (see Desk/docs)
+
+Through a robot (the robot holds its own key to the desk; every call needs the phone's secret `token`, else HTTP 401):
+
+| Request | Effect |
+|---|---|
+| `GET /api/desk` | `{paired,host,ok,hv,h,moving,dir,armed,travel,src,err,age}` (also in `/api/state` as `desk`; `caps` contains `desk`) |
+| `POST /api/desk/pair?host=desk.local&token=T` | the robot pairs with the desk (pairing window must be open); `token` (8+ chars) protects the next calls |
+| `POST /api/desk/unpair?token=T` | forget the desk |
+| `POST /api/desk/cmd?token=T&op=move&dir=up\|down` | hold (repeat every 250 ms), `op=stop`, `op=preset&n=1..4`, `op=save&n=`, `op=tap&key=&ms=`, `op=setheight&h=`, `op=arm&on=1\|0` |
+
+The desk module itself speaks **DeskLink v1** (`Shared/DeskLink`, `Desk/docs/SECURITY.md`): `GET /dl/info`, `GET /dl/challenge`, `POST /dl/pair`, `POST /dl/cmd` (sealed). The phone app talks to it directly.

@@ -5,6 +5,7 @@
 #include "logbuf.h"
 #include "deskclient.h"
 #include <ArduinoJson.h>
+#include <Preferences.h>
 #include <WiFi.h>
 
 namespace desk {
@@ -25,7 +26,23 @@ static bool wasMoving = false;
 static int lastDir = 0;
 static bool wasOk = true;
 
+static Preferences tokPrefs;
+static char token[40] = "";
+
+bool tokenSet() { return token[0] != 0; }
+void setToken(const char* t) { strlcpy(token, t, sizeof(token)); tokPrefs.putString("tok", token); }
+bool checkToken(const char* t) {
+  if (!token[0] || !t) return false;
+  size_t n = strlen(token);
+  if (strlen(t) != n) return false;
+  uint8_t diff = 0;                                   // constant time compare
+  for (size_t i = 0; i < n; i++) diff |= token[i] ^ t[i];
+  return diff == 0;
+}
+
 void init() {
+  tokPrefs.begin("deskcfg", false);
+  tokPrefs.getString("tok", token, sizeof(token));
   client.begin();
   cmdQ = xQueueCreate(4, sizeof(Cmd));
   st.paired = client.paired();
@@ -63,6 +80,8 @@ bool pair(const char* hostName, String& err) {
 }
 
 void unpair() {
+  token[0] = 0;
+  tokPrefs.remove("tok");
   JsonDocument q, r;
   String err;
   q["op"] = "unpair";

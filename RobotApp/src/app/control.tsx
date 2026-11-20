@@ -4,6 +4,7 @@ import { GestureResponderEvent, Pressable, StyleSheet, View } from 'react-native
 import { EMOTES, MOODS, MOVES, SCREENS } from '@/api/catalog';
 import type { Mode } from '@/api/types';
 import { ThemedText } from '@/components/themed-text';
+import { DeskPanel } from '@/components/desk-panel';
 import { Button, Card, Chip, Page, Segmented, SwitchRow, Wrap } from '@/components/ui';
 import { useRobotState, useSend } from '@/hooks/use-robot';
 import { useTheme } from '@/hooks/use-theme';
@@ -15,6 +16,23 @@ const MODE_HELP: Record<Mode, string> = {
 };
 
 export default function ControlScreen() {
+  const [tab, setTab] = useState<'robot' | 'desk'>('robot');
+  return (
+    <Page title="Control">
+      <Segmented
+        options={[
+          { value: 'robot' as const, label: 'Robot' },
+          { value: 'desk' as const, label: 'Desk' },
+        ]}
+        value={tab}
+        onChange={setTab}
+      />
+      {tab === 'robot' ? <RobotControl /> : <DeskPanel />}
+    </Page>
+  );
+}
+
+function RobotControl() {
   const theme = useTheme();
   const send = useSend();
   const { state, client } = useRobotState();
@@ -35,7 +53,7 @@ export default function ControlScreen() {
   };
 
   return (
-    <Page title="Control">
+    <>
       <Card title="Mode">
         <Segmented<Mode>
           options={[
@@ -106,7 +124,7 @@ export default function ControlScreen() {
           </Wrap>
         </Card>
       ) : null}
-    </Page>
+    </>
   );
 }
 

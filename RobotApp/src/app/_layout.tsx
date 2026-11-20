@@ -4,12 +4,21 @@ import { useColorScheme } from 'react-native';
 
 import AppTabs from '@/components/app-tabs';
 import { useConnectionNotes, useEventPump, useLogPump } from '@/hooks/use-robot';
+import { setRandomProvider } from '@/desk/crypto';
 import { installFeedback } from '@/lib/feedback';
+import { useDesk } from '@/store/desk';
+import { getRandomBytes } from 'expo-crypto';
+import { useEffect } from 'react';
 
 const queryClient = new QueryClient();
 installFeedback();
+setRandomProvider((n) => getRandomBytes(n));
 
 function Pumps() {
+  const load = useDesk((s) => s.load);
+  useEffect(() => {
+    load();
+  }, [load]);
   useEventPump();
   useLogPump();
   useConnectionNotes();

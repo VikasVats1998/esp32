@@ -6,11 +6,15 @@
 import { DISPLAY_PATTERNS, MOODS, PAD_NAMES, SERVO_NAMES } from '@/api/catalog';
 import type { RobotClient } from '@/api/client';
 import type { RobotKind, RobotState } from '@/api/types';
+import type { DeskLinkClient } from '@/desk/client';
 
-export type Group = 'Overview' | 'Screen' | 'Touch pads' | 'Sensors' | 'Motors' | 'Sound' | 'Network';
+export type Group = 'Overview' | 'Screen' | 'Touch pads' | 'Sensors' | 'Motors' | 'Sound' | 'Network' | 'Desk';
 
 export interface Ctx {
+  /** the selected robot (desk tests do not use it and also run without a robot) */
   client: RobotClient;
+  /** the paired desk module (only set for desk tests) */
+  desk?: DeskLinkClient;
   kind: RobotKind;
   /** show progress text on the test row while it runs */
   note: (text: string) => void;
@@ -433,6 +437,148 @@ export function buildTests(kind: RobotKind): TestDef[] {
     },
   });
 
+  return tests;
+}
+
+// ------------------------------------------------ standing desk (module inside the handset)
+export function buildDeskTests(): TestDef[] {
+  const tests: TestDef[] = [];
+  const add = (t: Omit<TestDef, 'group'>) => tests.push({ ...t, group: 'Desk' });
+  const d = (c: Ctx) => {
+    if (!c.desk) throw new Error('no desk paired');
+    return c.desk;
+  };
+  add({
+    id: 'desk_reach', title: 'Desk module reachable', kind: 'auto',
+    help: 'The desk module answers on Wi-Fi.',
+    run: async (ctx) => {
+      const i = await d(ctx).info();
+      return { ok: i.dev === 'desk', detail: `firmware ${i.fw}, ${i.clients} paired client(s)${i.pairing ? `, pairing open ${i.left} s` : ''}` };
+    },
+  });
+  add({
+    id: 'desk_auth', title: 'Secure link works', kind: 'auto',
+    help: 'Sends a sealed command (challenge + AES-GCM) and verifies the sealed answer.',
+    run: async (ctx) => {
+      const t0 = Date.now();
+      const s = await d(ctx).state(false);
+      return { ok: s.ok, detail: `answer verified in ${Date.now() - t0} ms` };
+    },
+  });
+  add({
+    id: 'desk_security', title: 'Replay and wrong key are rejected', kind: 'auto',
+    help: 'A recorded request must not work twice; a message sealed with another key must be refused. Uses 2 of the 5 bad messages allowed per minute.',
+    run: async (ctx) => {
+      const r = await d(ctx).securityProbe();
+      return { ok: r.replayRejected && r.wrongKeyRejected, detail: `replay ${r.replayRejected ? 'rejected' : 'ACCEPTED'}, wrong key ${r.wrongKeyRejected ? 'rejected' : 'ACCEPTED'}` };
+    },
+  });
+  add({
+    id: 'desk_height', title: 'Height feedback', kind: 'auto',
+    help: 'The module must know the height (read from the display line, or estimated and calibrated).',
+    run: async (ctx) => {
+      const s = await d(ctx).state(false);
+      if (!s.hv) return { ok: false, detail: 'unknown: enter the display height in Control > Desk (calibrate)' };
+      return { ok: true, detail: `${s.h.toFixed(1)} cm from the ${s.src === 'display' ? 'display line' : 'estimate (display line not read)'}` };
+    },
+  });
+  add({
+    id: 'desk_display', title: 'Display line decoded (optional)', kind: 'auto',
+    help: 'Only when the handset data line is wired to the module: frames must arrive with a good checksum.',
+    run: async (ctx) => {
+      const s = await d(ctx).state(false);
+      return { ok: s.frames > 0, detail: s.frames > 0 ? `${s.frames} frames ok, ${s.bad} bad, display "${s.disp}"` : s.bytes > 0 ? `${s.bytes} bytes but no valid frame: check the baud rate and use Raw capture` : 'no data on the line (not wired = estimate is used)' };
+    },
+  });
+  add({
+    id: 'desk_childlock', title: 'Child lock', kind: 'auto',
+    help: 'With the child lock on, a move command must be refused. The lock is switched off again afterwards.',
+    run: async (ctx) => {
+      const c = d(ctx);
+      await c.arm(false);
+      const r = await c.move('up', 100);
+      await c.arm(true);
+      return { ok: r.ok === false, detail: r.ok ? 'the move was NOT refused' : `refused: ${r.err}` };
+    },
+  });
+  add({
+    id: 'desk_up', title: 'Nudge UP (dead-man)', kind: 'confirm',
+    help: 'Sends ONE short move message. The desk rises about 1 cm and must then stop by itself. Keep the desk area clear.',
+    run: async (ctx) => {
+      const c = d(ctx);
+      const before = await c.state(false);
+      await c.move('up', 450);
+      await ctx.sleep(1400);
+      const after = await c.state(false);
+      if (after.keys[0] === '#') {
+        await c.stop();
+        return { ok: false, detail: 'UP stayed pressed after the keep-alive ended: safety failure' };
+      }
+      return { ask: `Did the desk rise a little and stop by itself? (${before.h.toFixed(1)} to ${after.h.toFixed(1)} cm)` };
+    },
+  });
+  add({
+    id: 'desk_down', title: 'Nudge DOWN (dead-man)', kind: 'confirm',
+    help: 'Sends ONE short move message. The desk lowers about 1 cm and must then stop by itself.',
+    run: async (ctx) => {
+      const c = d(ctx);
+      const before = await c.state(false);
+      await c.move('down', 450);
+      await ctx.sleep(1400);
+      const after = await c.state(false);
+      if (after.keys[1] === '#') {
+        await c.stop();
+        return { ok: false, detail: 'DOWN stayed pressed after the keep-alive ended: safety failure' };
+      }
+      return { ask: `Did the desk lower a little and stop by itself? (${before.h.toFixed(1)} to ${after.h.toFixed(1)} cm)` };
+    },
+  });
+  add({
+    id: 'desk_stop', title: 'STOP', kind: 'confirm',
+    help: 'Moves up while sending keep-alives, then sends STOP. The desk must stop at once.',
+    run: async (ctx) => {
+      const c = d(ctx);
+      for (let i = 0; i < 4; i++) {
+        await c.move('up', 700);
+        await ctx.sleep(250);
+      }
+      await c.stop();
+      await ctx.sleep(300);
+      const s = await c.state(false);
+      if (s.keys.includes('#')) return { ok: false, detail: `a key is still pressed after STOP (${s.keys})` };
+      return { ask: 'Did the desk stop immediately when STOP was sent?' };
+    },
+  });
+  for (let n = 1; n <= 4; n++) {
+    add({
+      id: `desk_preset_${n}`, title: `Memory position ${n}`, kind: 'confirm',
+      help: `The desk drives to the height stored in memory ${n}. It only works if you saved a height there with the handset. Stand clear; STOP is in Control, Desk.`,
+      run: async (ctx) => {
+        const r = await d(ctx).preset(n);
+        if (!r.ok) return { ok: false, detail: `refused: ${r.err}` };
+        await ctx.sleep(2500);
+        return { ask: `Did the desk start driving to memory ${n}? (press STOP in Control, Desk when it is enough)` };
+      },
+    });
+  }
+  add({
+    id: 'desk_key_s', title: 'Key S', kind: 'confirm',
+    help: 'Taps the S key once (150 ms).',
+    run: async (ctx) => {
+      await d(ctx).tap('s', 150);
+      await ctx.sleep(600);
+      return { ask: 'Did the handset react to S (display or beep)?' };
+    },
+  });
+  add({
+    id: 'desk_key_x', title: 'Key X (the blank key)', kind: 'confirm',
+    help: 'Taps the blank 8th key once. Its function is unknown: watch what the handset does.',
+    run: async (ctx) => {
+      await d(ctx).tap('x', 150);
+      await ctx.sleep(600);
+      return { ask: 'Did something happen (display, beep, light)? Answer No if nothing visible happened.' };
+    },
+  });
   return tests;
 }
 

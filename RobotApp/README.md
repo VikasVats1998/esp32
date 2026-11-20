@@ -28,7 +28,8 @@ npx expo start            # scan the QR code with Expo Go (phone on the same Wi-
    * **Robot log**: the robot's complete log (its own messages, every request it received, events, ESP system logs), with level filter, search, pause, share.
    * **Events**: touch gestures, shakes, buttons as the robot saw them.
    * **Requests**: every request the app sent, with status, time and answer (and every failure).
-5. **Settings**: brightness, volume, (Chiku) weather location, alarms, timers, camera, voice upload, firmware (.bin) upload, reboot.
+5. **Desk** (Control, Desk): the standing-desk accessory: secure pairing, live height, hold-to-move UP/DOWN, STOP, memory positions, child lock, pairing the robots, diagnostics. The desk tests are in Test, Checklist. Console accepts `desk ...` commands.
+6. **Settings**: brightness, volume, (Chiku) weather location, alarms, timers, camera, voice upload, firmware (.bin) upload, reboot.
 
 **Feedback on every command:** a green/red line at the top of every screen shows what the robot answered (and how long it took),
 including the robot's own message. Errors also appear in Console > Requests and Console > Robot log.
@@ -39,6 +40,8 @@ Use **Manual** mode while testing hardware: the robot then only does what you te
 
 ```bash
 node tools/mock-robot.mjs                       # Chiku on :8787, Jinu on :8788
+npx tsx tools/mock-desk.mts                      # mock desk module on :8790 (real DeskLink protocol)
+npx tsx tools/smoke-desk.mts localhost:8790     # desk client: pairing, sealed commands, dead-man, replay, lock-out
 npx tsx tools/smoke.mts localhost:8787 chiku    # ~50 checks: API, feedback, log, console commands, checklist (also works against a real robot)
 ```
 In a dev build the Robots tab has "Mock" buttons (Android emulator uses `10.0.2.2:8787`).

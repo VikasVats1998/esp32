@@ -8,6 +8,7 @@ import { Button, Card, Chip, Page, Segmented, Wrap } from '@/components/ui';
 import { Spacing } from '@/constants/theme';
 import { useActiveRobot, useRobotState } from '@/hooks/use-robot';
 import { useTheme } from '@/hooks/use-theme';
+import { runDesk } from '@/lib/desk-commands';
 import { runCommand } from '@/lib/commands';
 import { describeEvent, fmtTime } from '@/lib/events';
 import { useConsole, useLogs, useTraffic } from '@/store/diagnostics';
@@ -15,7 +16,7 @@ import { useUi } from '@/store/robots';
 
 type View_ = 'commands' | 'log' | 'events' | 'traffic';
 
-const QUICK = ['help', 'state', 'diag', 'mode manual', 'mode auto', 'mood happy', 'move wiggle', 'stop', 'say hello', 'beep 440 300', 'release', 'pad 4 double'];
+const QUICK = ['help', 'state', 'diag', 'desk state', 'mode manual', 'mode auto', 'mood happy', 'move wiggle', 'stop', 'say hello', 'beep 440 300', 'release', 'pad 4 double'];
 const LEVEL_COLOR = ['#FF3B30', '#FF9F0A', undefined, '#8E8E93'] as const;
 const LEVEL_CHAR = ['E', 'W', 'I', 'D'];
 
@@ -29,11 +30,11 @@ function Commands() {
   const [busy, setBusy] = useState(false);
 
   const send = async (cmd: string) => {
-    if (!client || !cmd.trim()) return;
+    if (!cmd.trim()) return;
     setBusy(true);
     const t0 = Date.now();
     try {
-      const r = await runCommand(client, cmd);
+      const r = await runCommand(client, cmd, runDesk);
       add({ cmd, ok: r.ok, text: r.text, ms: Date.now() - t0 });
     } catch (e) {
       add({ cmd, ok: false, text: (e as Error).message, ms: Date.now() - t0 });
@@ -57,7 +58,7 @@ function Commands() {
           returnKeyType="send"
           style={[styles.input, { color: theme.text, backgroundColor: theme.backgroundSelected }]}
         />
-        <Button label={busy ? 'Sending...' : 'Send'} disabled={busy || !client} onPress={() => send(text)} />
+        <Button label={busy ? 'Sending...' : 'Send'} disabled={busy} onPress={() => send(text)} />
         <Wrap>
           {QUICK.map((q) => (
             <Chip key={q} label={q} onPress={() => (q.includes(' ') || q === 'help' || q === 'state' || q === 'diag' || q === 'stop' || q === 'release' ? send(q) : setText(q))} />

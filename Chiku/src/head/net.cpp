@@ -119,13 +119,22 @@ static void deskJson(JsonObject o) {
 static void setupDeskRoutes() {
   route("/api/desk", HTTP_GET, []() { JsonDocument d; deskJson(d.to<JsonObject>()); sendJson(d); });
   route("/api/desk/pair", HTTP_POST, []() {
+    // The token protects the desk endpoints. It can only be set while none exists (or after unpairing).
+    String tok = server.arg("token");
+    if (tok.length() < 8) { bad("token (8+ characters) required"); return; }
+    if (desk::tokenSet() && !desk::checkToken(tok.c_str())) { LOGW("desk", "pair refused: wrong token"); server.send(401, "text/plain", "wrong token"); return; }
     String host = server.hasArg("host") && server.arg("host").length() ? server.arg("host") : String("desk.local");
     String err;
-    if (desk::pair(host.c_str(), err)) ok("paired"); else bad(err.c_str());
+    if (desk::pair(host.c_str(), err)) { desk::setToken(tok.c_str()); ok("paired"); } else bad(err.c_str());
   });
-  route("/api/desk/unpair", HTTP_POST, []() { desk::unpair(); ok("unpaired"); });
+  route("/api/desk/unpair", HTTP_POST, []() {
+    if (!desk::checkToken(server.arg("token").c_str())) { LOGW("desk", "unpair refused: wrong token"); server.send(401, "text/plain", "wrong token"); return; }
+    desk::unpair();
+    ok("unpaired");
+  });
   route("/api/desk/cmd", HTTP_POST, []() {
     String op = server.arg("op");
+    if (!desk::checkToken(server.arg("token").c_str())) { LOGW("desk", "desk command refused: missing or wrong token"); server.send(401, "text/plain", "wrong token"); return; }
     if (!desk::state().paired) { bad("desk not paired"); return; }
     if (op == "move") {
       int dir = server.arg("dir") == "up" ? 1 : server.arg("dir") == "down" ? -1 : 0;

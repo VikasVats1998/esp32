@@ -1,9 +1,11 @@
 // Runs the hardware checklist tests (src/lib/checklist.ts) and keeps their results.
 import { useCallback, useMemo } from 'react';
 
-import { type Ctx, type TestDef, buildTests, wait } from '@/lib/checklist';
+import { type Ctx, type TestDef, buildDeskTests, buildTests, wait } from '@/lib/checklist';
+import type { RobotClient } from '@/api/client';
 import { useChecklist, useLogs, type TestResult } from '@/store/diagnostics';
 
+import { useDeskClient } from './use-desk';
 import { useActiveRobot, useRobotState } from './use-robot';
 
 export function useChecklistRunner() {
@@ -15,16 +17,19 @@ export function useChecklistRunner() {
   const kind = robot?.kind ?? 'chiku';
   const host = robot?.host ?? '';
 
-  const tests = useMemo<TestDef[]>(() => buildTests(kind), [kind]);
+  const desk = useDeskClient();
+  const tests = useMemo<TestDef[]>(() => [...buildTests(kind), ...(desk ? buildDeskTests() : [])], [kind, desk]);
 
   const resultOf = useCallback((id: string): TestResult | undefined => results[`${host}:${id}`], [results, host]);
 
   const run = useCallback(
     async (t: TestDef) => {
-      if (!client) return;
+      const isDesk = t.group === 'Desk';
+      if (isDesk ? !desk : !client) return;
       const key = `${host}:${t.id}`;
       const ctx: Ctx = {
-        client,
+        client: client as RobotClient, // desk tests never use it
+        desk,
         kind,
         sleep: wait,
         note: (text) => setResult(key, { status: 'running', detail: text, at: Date.now() }),
@@ -39,7 +44,7 @@ export function useChecklistRunner() {
         setResult(key, { status: 'fail', detail: (e as Error).message, at: Date.now() });
       }
     },
-    [client, host, kind, setResult],
+    [client, desk, host, kind, setResult],
   );
 
   const answer = useCallback(
@@ -75,5 +80,5 @@ export function useChecklistRunner() {
     return lines.join('\n');
   }, [robot, state, tests, results, host]);
 
-  return { tests, resultOf, run, answer, runAuto, report, reset: () => clearHost(host), enabled: !!client };
+  return { tests, resultOf, run, answer, runAuto, report, reset: () => clearHost(host), enabled: !!client || !!desk };
 }

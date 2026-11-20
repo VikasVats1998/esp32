@@ -227,6 +227,18 @@ export class RobotClient {
     return this.post('/api/weather/refresh');
   }
 
+  // ---- standing desk through the robot (the robot holds its own key) ----
+  /** `token` protects the robot's desk endpoints (the robot holds the desk key). The phone creates it once. */
+  deskPair(host: string, token: string) {
+    return this.post('/api/desk/pair', { host, token });
+  }
+  deskUnpair(token: string) {
+    return this.post('/api/desk/unpair', { token });
+  }
+  deskCmd(token: string, op: 'move' | 'stop' | 'preset' | 'save' | 'tap' | 'setheight' | 'arm', params: Params = {}) {
+    return this.post('/api/desk/cmd', { op, token, ...params });
+  }
+
   // ---- files ----
   /** Upload a firmware .bin to /update (OTA). `file` is a RN file object {uri,name,type} or a Blob. */
   async uploadFirmware(file: unknown) {

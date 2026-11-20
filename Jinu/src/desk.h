@@ -30,6 +30,12 @@ const char* host();
 bool pair(const char* host, String& err);       // blocking; network task (e.g. from an HTTP handler)
 void unpair();
 
+// Access token for the robot's desk HTTP endpoints (the robot holds the desk key, so its API must not be open).
+// The phone sets it when it pairs the robot with the desk; later desk commands must send the same token.
+bool tokenSet();
+void setToken(const char* token);
+bool checkToken(const char* token);
+
 // Non-blocking requests (sent by update()):
 void moveHold(int dir);                         // call every ~250 ms while a button is held: +1 up, -1 down
 void command(const char* op, int n = 0, const char* key = nullptr, float v = 0, int ms = 0);

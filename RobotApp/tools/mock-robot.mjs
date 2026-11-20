@@ -17,7 +17,7 @@ function makeRobot(kind, port) {
     power: 0, screen: 0, lat: 47.73, lon: 7.55,
     servo: Array.from({ length: nServos }, () => ({ trim: 0, min: chiku && false ? 0 : 10, max: 170, inv: false, cur: 90 })),
     alarms: Array.from({ length: 8 }, () => ({ on: false, h: 7, m: 0, days: 127 })),
-    timers: [0, 0, 0], events: [], count: 0, log: [], fwlog: [], logCount: 0, snap: 0, led: null,
+    timers: [0, 0, 0], desk: { paired: false, host: '' }, events: [], count: 0, log: [], fwlog: [], logCount: 0, snap: 0, led: null,
   };
   const push = (type, a = 0, b = 0) => { r.events.push({ n: ++r.count, t: Date.now() - t0, type, a, b }); if (r.events.length > 48) r.events.shift(); r.fwlog && fwlog(2, `[event] ${type} a=${a} b=${b}`); };
   const logCall = (m) => { r.log.push(m); if (r.log.length > 200) r.log.shift(); };
@@ -31,8 +31,9 @@ function makeRobot(kind, port) {
   setInterval(() => { r.dist = Math.max(3, Math.min(250, Math.round(r.dist + (Math.random() - 0.5) * 20))); }, 300);
 
   const state = () => ({
-    robot: kind, api: 1, fw: 'mock', caps: chiku ? ['screens','alarms','timers','weather','imu','cam','pan','battery','display_test'] : ['display_test','rgb_led'],
+    robot: kind, api: 1, fw: 'mock', caps: chiku ? ['screens','alarms','timers','weather','imu','cam','pan','battery','display_test','desk'] : ['display_test','rgb_led','desk'],
     name: kind, ip: `127.0.0.1:${port}`, ssid: 'MockWiFi', rssi: -55, uptime: Math.round((Date.now() - t0) / 1000), heap: 180000,
+    desk: { paired: r.desk.paired, host: r.desk.host, ok: r.desk.paired, hv: r.desk.paired, h: 82.0, moving: false, dir: 0, armed: true, travel: false, src: 'display', err: '', age: 300 },
     mode: r.mode, mute: r.mute, mood: r.mood, brightness: r.brightness, volume: r.volume, dist: r.dist, pads: r.pads, padsOnline: true,
     avoid: r.avoid, gait: r.gait, busy: r.busy, power: r.power, audio: true, servo: r.servo,
     ...(chiku ? {
@@ -65,6 +66,7 @@ function makeRobot(kind, port) {
         { name: 'pad_expander', ok: true, detail: 'PCF8574 0x20', live: false },
         ...(chiku ? [{ name: 'servo_driver', ok: true, detail: 'PCA9685', live: false }, { name: 'imu_gravity', ok: true, detail: '1.00 g (expect 1.0)', live: true }, { name: 'rtc', ok: true, detail: 'PCF85063', live: false }, { name: 'rtc_time', ok: true, detail: 'time valid', live: true }, { name: 'cam_link', ok: true, detail: 'sleep 192.168.1.50', live: true }] : []),
         { name: 'sonar', ok: r.dist > 0, detail: `${r.dist} cm`, live: true }, { name: 'wifi', ok: true, detail: '-55 dBm', live: true } ], heap: 180000, uptime: Math.round((Date.now() - t0) / 1000) });
+      if (p === '/api/desk') return send(state().desk);
       if (p === '/__log') return send(r.log);
       res.writeHead(404); return res.end('not found');
     }
@@ -83,6 +85,9 @@ function makeRobot(kind, port) {
       case '/api/servo/test': { const s = r.servo[+q.ch]; if (s) s.cur = +q.deg; return ok(); }
       case '/api/say': return ok('clip');
       case '/api/beep': case '/api/melody': case '/api/audio/stop': case '/api/look': return ok();
+      case '/api/desk/pair': if (!q.token || q.token.length < 8) { res.writeHead(400); return res.end('token (8+ characters) required'); } if (r.token && r.token !== q.token) { res.writeHead(401); return res.end('wrong token'); } r.token = q.token; r.desk = { paired: true, host: q.host || 'desk.local' }; fwlog(2, `[desk] paired with ${r.desk.host}`); return ok('paired');
+      case '/api/desk/unpair': if (r.token !== q.token) { res.writeHead(401); return res.end('wrong token'); } r.token = undefined; r.desk = { paired: false, host: '' }; return ok('unpaired');
+      case '/api/desk/cmd': if (!r.token || r.token !== q.token) { res.writeHead(401); return res.end('wrong token'); } if (!r.desk.paired) { res.writeHead(400); return res.end('desk not paired'); } fwlog(2, `[desk] -> ${q.op}`); return ok(q.op);
       case '/api/led': r.led = q.off ? null : [+q.r, +q.g, +q.b]; return ok();
       case '/api/screen': r.screen = +q.id; return ok();
       case '/api/display': return ok();

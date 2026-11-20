@@ -53,6 +53,24 @@ export interface RobotState {
   weather?: { valid: boolean; temp: number; min: number; max: number; text: string };
   alarms?: { on: boolean; h: number; m: number; days: number }[];
   timers?: number[];
+  /** the robot's own link to the standing desk (secure DeskLink); present when caps has "desk" */
+  desk?: RobotDesk;
+}
+
+export interface RobotDesk {
+  paired: boolean;
+  host: string;
+  ok: boolean;
+  hv: boolean;
+  h: number;
+  moving: boolean;
+  dir: number;
+  armed: boolean;
+  travel: boolean;
+  src: string;
+  err: string;
+  /** ms since the last good answer, -1 = never */
+  age: number;
 }
 
 export interface RobotEvent {

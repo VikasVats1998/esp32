@@ -19,6 +19,7 @@ export const HELP = `Commands:
   sim <shake|pickup|putdown|fall|tap|obstacle|touch|alarm|button>
   set brightness|volume <n>     timer <seconds>     cam wake|sleep|led_on|led_off|snap
   state    diag    reboot
+  desk state|up|down|stop|preset <n>|save <n>|tap <key> [ms]|height <cm>|arm on|off|log|raw|clients|pair [host]|forget
   GET /api/...   POST /api/...?x=1 [json body]   (any request)
 Gaits: ${[...MOVES, ...EMOTES].join(' ')}`;
 
@@ -41,7 +42,10 @@ const index = (list: readonly string[], s: string, what: string) => {
 
 const GESTURE_IDS: Record<string, number> = { tap: 1, double: 2, triple: 3, long: 4, release: 5 };
 
-export async function runCommand(client: RobotClient, input: string): Promise<CommandResult> {
+/** Handles the `desk ...` commands (needs the app stores, so it is passed in by the Console). */
+export type DeskHandler = (args: string[]) => Promise<CommandResult>;
+
+export async function runCommand(client: RobotClient | undefined, input: string, desk?: DeskHandler): Promise<CommandResult> {
   const line = input.trim();
   if (!line) return { ok: true, text: '' };
   if (line === 'help' || line === '?') return { ok: true, text: HELP };
@@ -49,6 +53,7 @@ export async function runCommand(client: RobotClient, input: string): Promise<Co
   // raw request: GET /path   or   POST /path?x=1 {json}
   const raw = /^(GET|POST)\s+(\S+)(?:\s+(.*))?$/i.exec(line);
   if (raw) {
+    if (!client) throw new Error('no robot selected');
     const r = await client.raw(raw[1].toUpperCase() as 'GET' | 'POST', raw[2], raw[3]);
     let text = r.text;
     try {
@@ -60,6 +65,11 @@ export async function runCommand(client: RobotClient, input: string): Promise<Co
   }
 
   const [cmd, ...a] = line.split(/\s+/);
+  if (cmd.toLowerCase() === 'desk') {
+    if (!desk) throw new Error('desk commands are not available here');
+    return desk(a);
+  }
+  if (!client) throw new Error('no robot selected (desk commands work without one)');
   const reply = (r: { ok: boolean; msg?: string }) => ({ ok: r.ok, text: r.msg ? `ok: ${r.msg}` : 'ok' });
 
   switch (cmd.toLowerCase()) {
