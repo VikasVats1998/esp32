@@ -59,6 +59,8 @@ static uint32_t holdLeft = 0, blinkIn = 2500, blinkT = 0, lookIn = 2000;
 static float pulse = 0, spin = 0;
 static float tearY[2] = {0, 30}, spark[4] = {0, .25f, .5f, .75f}, sparkX[4], sparkYp[4], zLife[3] = {0, .33f, .66f};
 
+static volatile int testPattern = 0;
+void setTestPattern(int p) { testPattern = p; }
 void init() {}
 void setMood(Mood m, uint32_t hold) { reqMood = m; reqHold = hold; reqFlag = true; }
 void setBaseMood(Mood m) { baseMood = m; }
@@ -143,6 +145,13 @@ static void drawEffects(Arduino_GFX* g, float dt, Mood m) {
 // ---------- one frame ----------
 void update(uint32_t dtMs) {
   Arduino_GFX* g = display::canvas();
+  if (testPattern) {                                              // display test: solid colours / grey ramp
+    static const uint16_t C[] = {0, 0xF800, 0x07E0, 0x001F, 0xFFFF, 0x0000};
+    if (testPattern == 6) for (int x = 0; x < LCD_W; x++) { uint8_t v = x * 255 / (LCD_W - 1); g->drawFastVLine(x, 0, LCD_H, g->color565(v, v, v)); }
+    else g->fillScreen(C[testPattern > 5 ? 5 : testPattern]);
+    display::flush();
+    return;
+  }
   float dt = dtMs / 1000.f, k = 1.f - expf(-(float)dtMs / 90.f);
 
   if (reqFlag) { reqFlag = false; mood = reqMood; holdLeft = reqHold; }

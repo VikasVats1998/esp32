@@ -17,6 +17,7 @@
 #define DEBUG_HEAP_LOG    1   // print free heap/PSRAM every minute
 
 // ---- Identity ----
+#define FW_VERSION        "1.1.0"
 #define ROBOT_NAME        "chiku"           // mDNS: chiku.local
 #define AP_SSID           "Chiku-Setup"     // captive portal (open network)
 

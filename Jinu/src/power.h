@@ -8,5 +8,6 @@ enum State : uint8_t { ACTIVE, DIM, SLEEP };
 void init();
 void update();            // ~5x per second
 void activity();
+void keepAwake(bool on);   // true: never dim or sleep (manual mode)
 State state();
 }  // namespace power

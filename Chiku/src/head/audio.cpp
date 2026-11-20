@@ -85,18 +85,21 @@ static bool codecInit() {
   return true;
 }
 
+static volatile bool mutedFlag = false;
+void setMuted(bool on) { mutedFlag = on; if (on) stop(); }
+bool muted() { return mutedFlag; }
 void setVolume(uint8_t p) { volume = constrain(p, 0, 100); }
 bool online() { return ok; }
 bool playing() { return busy || (noteQ && uxQueueMessagesWaiting(noteQ) > 0); }
 
 void beep(uint16_t hz, uint16_t ms) {
-  if (!ok) return;
+  if (!ok || mutedFlag) return;
   Note n = {hz, ms};
   xQueueSend(noteQ, &n, 0);
 }
 
 void play(Melody m, bool loop) {
-  if (!ok || m >= MEL_COUNT) return;
+  if (!ok || mutedFlag || m >= MEL_COUNT) return;
   loopFlag = loop;
   loopMelody = m;
   for (uint8_t i = 0; i < TUNES[m].count; i++) xQueueSend(noteQ, &TUNES[m].n[i], 0);
@@ -137,7 +140,7 @@ static void playNote(const Note& n) {
 
 // ---- babble ("cute talk") ----
 void babble(Babble style, uint8_t n) {
-  if (!ok) return;
+  if (!ok || mutedFlag) return;
   n = constrain(n, 1, 6);
   static const uint16_t BASE[BAB_COUNT] = {520, 420, 190, 480, 600, 450, 400};
   float base = BASE[style];
@@ -173,7 +176,7 @@ bool hasClip(const char* key) {
 }
 
 bool playWav(const char* path) {
-  if (!ok || !storage::fsReady() || !LittleFS.exists(path)) return false;
+  if (!ok || mutedFlag || !storage::fsReady() || !LittleFS.exists(path)) return false;
   strlcpy(wavPath, path, sizeof(wavPath));
   wavReq = true;
   return true;

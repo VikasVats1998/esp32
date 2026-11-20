@@ -132,18 +132,38 @@ static void idleLife(uint32_t now) {
   }
 }
 
+static Mode curMode = MODE_AUTO;
+const char* modeName(Mode m) { return m == MODE_MANUAL ? "manual" : m == MODE_EXPLORE ? "explore" : "auto"; }
+Mode mode() { return curMode; }
+bool modeFromName(const char* s, Mode& out) {
+  for (int i = 0; i < 3; i++) if (!strcmp(s, modeName((Mode)i))) { out = (Mode)i; return true; }
+  return false;
+}
+void setMode(Mode m) {
+  curMode = m;
+  motion::setAvoidMode(m == MODE_EXPLORE);
+  power::keepAwake(m == MODE_MANUAL);          // never dim or sleep while testing by hand
+  if (m != MODE_MANUAL) nextIdle = millis() + 20000;
+  face::setMood(m == MODE_EXPLORE ? face::M_EXCITED : face::M_NORMAL, m == MODE_EXPLORE ? 1500 : 0);
+}
+
 void init() { lastTouch = millis(); nextIdle = millis() + 30000; applyBrightness(); }
 
 void onEvent(const events::Event& e) {
   using namespace events;
+  if (curMode == MODE_MANUAL) {                // testing by hand: only housekeeping events are handled
+    switch (e.type) {
+      case EV_POWER: case EV_WAKE: case EV_SETTINGS: break;
+      default: return;
+    }
+  }
   switch (e.type) {
     case EV_PAD: power::activity(); onPad(e.a, e.b); break;
     case EV_BUTTON:
       power::activity();
       if (e.a == 1) {                                          // short press: explore mode on / off
-        motion::setAvoidMode(!motion::avoidMode());
-        face::setMood(motion::avoidMode() ? face::M_EXCITED : face::M_HAPPY, 1500);
-        audio::beep(motion::avoidMode() ? 1500 : 900, 80);
+        setMode(curMode == MODE_EXPLORE ? MODE_AUTO : MODE_EXPLORE);
+        audio::beep(curMode == MODE_EXPLORE ? 1500 : 900, 80);
       }
       break;
     case EV_DIST: onDistance(e.a); break;
@@ -156,6 +176,7 @@ void onEvent(const events::Event& e) {
 }
 
 void update(uint32_t dtMs) {
+  if (curMode == MODE_MANUAL) return;
   affection = fmaxf(0, affection - dtMs * 0.0003f);
   annoyance = fmaxf(0, annoyance - dtMs * 0.006f);
   idleLife(millis());

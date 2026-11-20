@@ -32,4 +32,10 @@ QueueHandle_t subscribe(uint8_t depth = 16);
 // Safe from any task. Never blocks. Returns false if a queue was full.
 bool publish(Type type, int32_t a = 0, int32_t b = 0);
 
+// History of the last events (for the phone app / manual testing). Distance
+// events are not stored (they are in /api/state).
+struct Record { uint32_t n; uint32_t ms; Type type; int32_t a; int32_t b; };
+const char* name(Type type);
+size_t history(uint32_t since, Record* out, size_t max, uint32_t& next);   // oldest first
+
 }  // namespace events

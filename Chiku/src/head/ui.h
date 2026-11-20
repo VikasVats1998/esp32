@@ -16,5 +16,6 @@ void onEvent(const events::Event& e);
 void show(Screen s);
 Screen current();
 void applyBrightness();                // set panel brightness from power state + settings
+void setTestPattern(int p);            // 0 off, 1 red, 2 green, 3 blue, 4 white, 5 black, 6 grey ramp (any task)
 void startMoodDemo();                  // cycle through all moods on the face
 }  // namespace ui

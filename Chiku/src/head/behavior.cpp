@@ -148,11 +148,33 @@ static void idleLife(uint32_t now) {
   }
 }
 
+static Mode curMode = MODE_AUTO;
+const char* modeName(Mode m) { return m == MODE_MANUAL ? "manual" : m == MODE_EXPLORE ? "explore" : "auto"; }
+Mode mode() { return curMode; }
+bool modeFromName(const char* s, Mode& out) {
+  for (int i = 0; i < 3; i++) if (!strcmp(s, modeName((Mode)i))) { out = (Mode)i; return true; }
+  return false;
+}
+void setMode(Mode m) {
+  curMode = m;
+  motion::setAvoidMode(m == MODE_EXPLORE);
+  motion::setFollowLook(m != MODE_MANUAL);
+  power::keepAwake(m == MODE_MANUAL);          // never dim or sleep while testing by hand
+  if (m != MODE_MANUAL) nextIdle = millis() + 20000;
+  face::setMood(m == MODE_EXPLORE ? face::M_EXCITED : face::M_NORMAL, m == MODE_EXPLORE ? 1500 : 0);
+}
+
 void init() { lastTouch = millis(); nextIdle = millis() + 30000; }
 
 void onEvent(const events::Event& e) {
   using namespace events;
   bool ringing = alarm_timer::ringing();
+  if (curMode == MODE_MANUAL) {                // testing by hand: only housekeeping events are handled
+    switch (e.type) {
+      case EV_ALARM_RING: case EV_ALARM_STOP: case EV_WEATHER: case EV_POWER: case EV_WAKE: case EV_SETTINGS: break;
+      default: return;
+    }
+  }
   switch (e.type) {
     case EV_TOUCH_TAP:
       if (ringing) { alarm_timer::stop(); break; }
@@ -213,6 +235,7 @@ void onEvent(const events::Event& e) {
 }
 
 void update(uint32_t dtMs) {
+  if (curMode == MODE_MANUAL) return;
   // feelings fade slowly
   affection = fmaxf(0, affection - dtMs * 0.0003f);
   annoyance = fmaxf(0, annoyance - dtMs * 0.006f);

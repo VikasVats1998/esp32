@@ -14,6 +14,8 @@ void beep(uint16_t hz, uint16_t ms);           // queued
 void play(Melody m, bool loop = false);        // loop = repeat until stop()
 void stop();                                   // silence now
 void setVolume(uint8_t percent);               // 0..100
+void setMuted(bool on);                        // true: nothing is played
+bool muted();
 bool playing();
 
 // ---- Speech ----

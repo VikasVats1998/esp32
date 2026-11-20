@@ -51,4 +51,11 @@ QueueHandle_t subscribe(uint8_t depth = 16);
 // Safe from any task. Never blocks. Returns false if a queue was full.
 bool publish(Type type, int32_t a = 0, int32_t b = 0);
 
+// History of the last events (for the phone app / manual testing). Noisy events
+// (distance, look, tilt) are not stored: they are in /api/state instead.
+struct Record { uint32_t n; uint32_t ms; Type type; int32_t a; int32_t b; };
+const char* name(Type type);
+// Copies records with n > since (oldest first). Returns how many; 'next' = last n seen.
+size_t history(uint32_t since, Record* out, size_t max, uint32_t& next);
+
 }  // namespace events

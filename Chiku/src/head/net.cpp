@@ -13,6 +13,10 @@
 #include "power.h"
 #include "audio.h"
 #include "face.h"
+#include "behavior.h"
+#include "imu.h"
+#include "pads.h"
+#include "ui.h"
 #include <WiFi.h>
 #include <WebServer.h>
 #include <DNSServer.h>
@@ -68,7 +72,27 @@ static void ok() { server.send(200, "application/json", "{\"ok\":true}"); }
 static void handleState() {
   Settings& s = storage::get();
   JsonDocument d;
+  d["robot"] = "chiku";
+  d["api"] = 1;
+  d["fw"] = FW_VERSION;
+  JsonArray caps = d["caps"].to<JsonArray>();
+  for (const char* c : {"screens", "alarms", "timers", "weather", "imu", "cam", "pan", "battery", "display_test"}) caps.add(c);
   d["name"] = ROBOT_NAME;
+  d["uptime"] = millis() / 1000;
+  d["rssi"] = WiFi.RSSI();
+  d["mode"] = behavior::modeName(behavior::mode());
+  d["mute"] = audio::muted();
+  d["mood"] = face::moodName(face::currentMood());
+  d["screen"] = (int)ui::current();
+  d["power"] = (int)power::state();
+  d["pads"] = pads::rawState();
+  d["padsOnline"] = pads::expanderOnline();
+  d["avoid"] = motion::avoidMode();
+  d["gait"] = motion::gaitName(motion::current());
+  d["busy"] = motion::busy();
+  JsonObject im = d["imu"].to<JsonObject>();
+  float ax, ay, az; imu::getAccel(ax, ay, az);
+  im["ok"] = imu::online(); im["x"] = ax; im["y"] = ay; im["z"] = az; im["tilt"] = imu::tiltDeg();
   d["ssid"] = s.ssid;
   d["ip"] = ipStr;
   d["lat"] = s.lat;
@@ -78,12 +102,15 @@ static void handleState() {
   d["heap"] = ESP.getFreeHeap();
   d["psram"] = ESP.getFreePsram();
   d["batt"] = power::batteryPercent();
+  d["charging"] = power::charging();
+  d["pca"] = servo::online();
+  d["audio"] = audio::online();
   d["dist"] = sonar::distanceCm();
   JsonArray sv = d["servo"].to<JsonArray>();
   for (int i = 0; i < SERVO_COUNT; i++) {
     JsonObject o = sv.add<JsonObject>();
     o["trim"] = s.servo[i].trim; o["min"] = s.servo[i].minDeg;
-    o["max"] = s.servo[i].maxDeg; o["inv"] = s.servo[i].invert;
+    o["max"] = s.servo[i].maxDeg; o["inv"] = s.servo[i].invert; o["cur"] = (int)servo::current(i);
   }
   JsonArray al = d["alarms"].to<JsonArray>();
   for (int i = 0; i < MAX_ALARMS; i++) {
@@ -144,6 +171,7 @@ static void handleSet() {
 static void handleMotion() {
   motion::Gait g;
   if (server.hasArg("avoid")) { motion::setAvoidMode(server.arg("avoid") == "1"); ok(); return; }
+  if (server.hasArg("stop")) { motion::stop(); ok(); return; }
   if (!motion::gaitFromName(server.arg("g").c_str(), g)) { server.send(400, "text/plain", "unknown gait"); return; }
   events::publish(events::EV_MOTION_CMD, g, server.hasArg("n") ? server.arg("n").toInt() : 4);
   ok();
@@ -217,7 +245,85 @@ static void handleVoiceUpload() {
   }
 }
 
+
+// ---------- test / control API (used by the phone app) ----------
+static const char* evName(uint8_t t) { return events::name((events::Type)t); }
+
+static void handleEvents() {
+  static events::Record rec[48];
+  uint32_t next = 0;
+  size_t n = events::history(server.arg("since").toInt(), rec, 48, next);
+  JsonDocument d;
+  d["next"] = next;
+  JsonArray a = d["events"].to<JsonArray>();
+  for (size_t i = 0; i < n; i++) {
+    JsonObject o = a.add<JsonObject>();
+    o["n"] = rec[i].n; o["t"] = rec[i].ms; o["type"] = evName(rec[i].type); o["a"] = rec[i].a; o["b"] = rec[i].b;
+  }
+  sendJson(d);
+}
+
+static void handleSim() {                                   // pretend a sensor event happened
+  if (server.hasArg("pad")) {
+    events::publish(events::EV_PAD, server.arg("pad").toInt(), server.hasArg("g") ? server.arg("g").toInt() : 1);
+    ok(); return;
+  }
+  String ev = server.arg("ev");
+  if (ev == "shake") events::publish(events::EV_SHAKE);
+  else if (ev == "pickup") events::publish(events::EV_PICKUP);
+  else if (ev == "putdown") events::publish(events::EV_PUTDOWN);
+  else if (ev == "fall") events::publish(events::EV_FALL);
+  else if (ev == "tap") events::publish(events::EV_TAP_IMU);
+  else if (ev == "obstacle") events::publish(events::EV_OBSTACLE, 8);
+  else if (ev == "touch") events::publish(events::EV_TOUCH_TAP, 233, 233);
+  else if (ev == "alarm") alarm_timer::testRing();
+  else { server.send(400, "text/plain", "unknown ev"); return; }
+  ok();
+}
+
+static void handleVoiceList() {
+  JsonDocument d;
+  JsonArray a = d.to<JsonArray>();
+  File dir = LittleFS.open("/voice");
+  if (dir && dir.isDirectory()) {
+    for (File f = dir.openNextFile(); f; f = dir.openNextFile()) {
+      String nm = f.name();
+      if (nm.endsWith(".wav")) a.add(nm.substring(0, nm.length() - 4));
+    }
+  }
+  sendJson(d);
+}
+
+static void setupTestRoutes() {
+  server.on("/api/events", HTTP_GET, handleEvents);
+  server.on("/api/sim", HTTP_POST, handleSim);
+  server.on("/api/voice/list", HTTP_GET, handleVoiceList);
+  server.on("/api/mode", HTTP_POST, []() {
+    behavior::Mode m;
+    if (!behavior::modeFromName(server.arg("m").c_str(), m)) { server.send(400, "text/plain", "auto|manual|explore"); return; }
+    behavior::setMode(m); ok();
+  });
+  server.on("/api/mute", HTTP_POST, []() { audio::setMuted(server.arg("on") == "1"); ok(); });
+  server.on("/api/servo/set", HTTP_POST, []() {
+    servo::setTarget(server.arg("ch").toInt(), server.arg("deg").toFloat(), server.hasArg("speed") ? server.arg("speed").toFloat() : 90);
+    ok();
+  });
+  server.on("/api/servo/release", HTTP_POST, []() { servo::releaseAll(); ok(); });
+  server.on("/api/beep", HTTP_POST, []() {
+    audio::beep(constrain((int)server.arg("hz").toInt(), 100, 8000), constrain((int)server.arg("ms").toInt(), 10, 3000)); ok();
+  });
+  server.on("/api/melody", HTTP_POST, []() {
+    audio::play((audio::Melody)constrain((int)server.arg("id").toInt(), 0, audio::MEL_COUNT - 1), server.arg("loop") == "1"); ok();
+  });
+  server.on("/api/audio/stop", HTTP_POST, []() { audio::stop(); ok(); });
+  server.on("/api/look", HTTP_POST, []() { face::lookAt(server.arg("x").toFloat(), server.arg("y").toFloat()); ok(); });
+  server.on("/api/screen", HTTP_POST, []() { events::publish(events::EV_SCREEN, server.arg("id").toInt()); ok(); });
+  server.on("/api/display", HTTP_POST, []() { ui::setTestPattern(server.arg("p").toInt()); ok(); });
+  server.on("/api/reboot", HTTP_POST, []() { ok(); delay(200); ESP.restart(); });
+}
+
 static void setupRoutes() {
+  setupTestRoutes();
   server.on("/api/say", HTTP_POST, []() {
     audio::say(server.arg("key").c_str(), audio::BAB_HAPPY); ok();
   });
@@ -243,7 +349,7 @@ static void setupRoutes() {
   });
   server.on("/api/mood", HTTP_POST, []() {
     int m = server.arg("m").toInt();
-    face::setMood((face::Mood)constrain(m, 0, face::MOOD_COUNT - 1), 5000); ok();
+    face::setMood((face::Mood)constrain(m, 0, face::MOOD_COUNT - 1), server.hasArg("hold") ? server.arg("hold").toInt() : 5000); ok();
   });
   server.on("/update", HTTP_GET, []() { server.send_P(200, "text/html", UPDATE_PAGE); });
   server.on("/update", HTTP_POST, []() {

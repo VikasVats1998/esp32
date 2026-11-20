@@ -6,6 +6,7 @@
 namespace power {
 static State st = ACTIVE;
 static volatile uint32_t lastActivity = 0;
+static volatile bool awake = false;
 
 static void setState(State s) {
   if (s == st) return;
@@ -22,7 +23,10 @@ void activity() {
   if (st != ACTIVE) { setState(ACTIVE); events::publish(events::EV_WAKE); }
 }
 
+void keepAwake(bool on) { awake = on; if (on) activity(); }
+
 void update() {
+  if (awake) return;
   uint32_t idle = millis() - lastActivity;
   if (idle > SLEEP_AFTER_MS) setState(SLEEP);
   else if (idle > DIM_AFTER_MS) setState(DIM);

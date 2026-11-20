@@ -27,5 +27,6 @@ void setAvoidMode(bool on);              // wander and avoid obstacles
 bool avoidMode();
 const char* gaitName(Gait g);
 bool gaitFromName(const char* name, Gait& out);
+void setFollowLook(bool on);             // false: head pan ignores the look direction (manual mode)
 void lookPan(float x);                   // head pan follows look (-1..1)
 }  // namespace motion

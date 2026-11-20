@@ -13,6 +13,9 @@ namespace ui {
 
 static lv_obj_t* screens[S_COUNT];
 static Screen cur = S_FACE;
+static lv_obj_t* testObj = nullptr;       // full-screen colour for display tests
+static volatile int reqPattern = 0;
+static int shownPattern = 0;
 static lv_obj_t* ring = nullptr;          // timer progress ring on the top layer
 static uint32_t slowAcc = 0;              // for the 4 Hz screen updates
 static bool demoOn = false;
@@ -70,7 +73,29 @@ void init() {
   lv_arc_set_bg_angles(ring, 0, 360);
   lv_arc_set_range(ring, 0, 1000);
   lv_obj_add_flag(ring, LV_OBJ_FLAG_HIDDEN);
+  testObj = lv_obj_create(lv_layer_top());
+  lv_obj_remove_style_all(testObj);
+  lv_obj_set_size(testObj, LCD_W, LCD_H);
+  lv_obj_set_style_bg_opa(testObj, LV_OPA_COVER, 0);
+  lv_obj_remove_flag(testObj, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_add_flag(testObj, LV_OBJ_FLAG_HIDDEN);
   show(S_FACE);
+}
+
+void setTestPattern(int p) { reqPattern = p; }
+
+static void applyPattern() {
+  int p = reqPattern;
+  if (p == shownPattern) return;
+  shownPattern = p;
+  if (p == 0) { lv_obj_add_flag(testObj, LV_OBJ_FLAG_HIDDEN); return; }
+  static const uint32_t C[] = {0, 0xFF0000, 0x00FF00, 0x0000FF, 0xFFFFFF, 0x000000, 0x000000};
+  lv_obj_set_style_bg_color(testObj, lv_color_hex(C[p > 6 ? 5 : p]), 0);
+  if (p == 6) {                                       // grey ramp: look for banding
+    lv_obj_set_style_bg_grad_color(testObj, lv_color_white(), 0);
+    lv_obj_set_style_bg_grad_dir(testObj, LV_GRAD_DIR_HOR, 0);
+  } else lv_obj_set_style_bg_grad_dir(testObj, LV_GRAD_DIR_NONE, 0);
+  lv_obj_remove_flag(testObj, LV_OBJ_FLAG_HIDDEN);
 }
 
 void startMoodDemo() { demoOn = true; demoIdx = 0; demoAcc = 0; face::setMood(face::M_NORMAL, 0); }
@@ -85,6 +110,7 @@ static void updateRing() {
 }
 
 void update(uint32_t dtMs) {
+  applyPattern();
   if (cur == S_FACE) face::update(dtMs);
   slowAcc += dtMs;
   if (slowAcc >= 250) {

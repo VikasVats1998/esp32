@@ -2,6 +2,7 @@
 #pragma once
 #include "pins.h"
 
+#define FW_VERSION   "1.1.0"
 #define ROBOT_NAME   "jinu"            // mDNS: jinu.local
 #define AP_SSID      "Jinu-Setup"      // captive portal (open network)
 #define DEBUG_HEAP_LOG 1

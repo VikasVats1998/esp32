@@ -20,5 +20,6 @@ void lookAt(float x, float y);              // -1..1, pauses auto-look for 3 s
 void setSleeping(bool on);
 Mood currentMood();
 const char* moodName(Mood m);
+void setTestPattern(int p);                 // 0 off, 1 red, 2 green, 3 blue, 4 white, 5 black, 6 grey ramp
 uint32_t ledColor();                        // current eye colour 0xRRGGBB (for the RGB LED)
 }  // namespace face

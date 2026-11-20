@@ -69,6 +69,7 @@ static uint32_t avoidUntil = 0;
 static uint32_t idleSince = 0;
 static float panTarget = 90;
 static float lastPan = -1;
+static bool followLook = true;
 
 void init() { q = events::subscribe(12); }
 
@@ -83,6 +84,7 @@ bool busy() { return running; }
 Gait current() { return gait; }
 void setAvoidMode(bool on) { avoid = on; avoidStep = 0; if (!on) stop(); }
 bool avoidMode() { return avoid; }
+void setFollowLook(bool on) { followLook = on; }
 void lookPan(float x) { panTarget = constrain(90.f + x * 35.f, 20.f, 160.f); }
 
 static void begin(Gait g, uint8_t cycles) {
@@ -120,7 +122,7 @@ static void handleEvents() {
         start((Gait)constrain(e.a, 0, G_COUNT - 1), e.b > 0 ? e.b : 4);
         break;
       case events::EV_LOOK:
-        lookPan(e.a / 100.f);
+        if (followLook) lookPan(e.a / 100.f);
         break;
       default: break;
     }
