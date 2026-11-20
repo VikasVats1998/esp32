@@ -19,7 +19,31 @@ pip install platformio "click<8.2"          # click 8.2+ breaks the bundled espt
 pio run -d Chiku -e head                     # also: -e cam
 pio run -d Jinu -e jinu
 pio run -d Desk -e desk
-cd RobotApp && npm install && npx expo start
+```
+
+## Upload to the boards
+
+Run these on the computer the board is plugged into (USB data cable). Install once:
+`pip install platformio "click<8.2"`. Add `--upload-port COM5` (Windows) or `--upload-port /dev/ttyACM0` if several boards are connected.
+
+| Board | Before uploading | Commands |
+|---|---|---|
+| **Chiku head** (ESP32-S3 AMOLED) | USB-C. If it does not connect: hold **BOOT**, tap **PWR/RESET**, release BOOT | `pio run -d Chiku -e head -t upload` then `pio run -d Chiku -e head -t uploadfs` (web page + voice clips) |
+| **Chiku ESP32-CAM** | USB-TTL adapter: 5V-5V, GND-GND, TX-U0R, RX-U0T, **IO0 to GND**, press the cam **RESET** | `pio run -d Chiku -e cam -t upload`, then remove IO0-GND and press RESET |
+| **Jinu** (ESP32-C6 LCD) | USB-C. If it does not connect: hold **BOOT**, tap **RESET**, release BOOT | `pio run -d Jinu -e jinu -t upload` then `pio run -d Jinu -e jinu -t uploadfs` (web page + voice clips) |
+| **Desk module** (S3 Super Mini) | hold **BOOT** while plugging in USB-C | `pio run -d Desk -e desk -t upload` |
+| **Probe** (S3 Super Mini) | hold **BOOT** while plugging in USB-C | `pio run -d Probe -e probe -t upload` |
+
+After uploading, press RESET (or unplug/replug). Watch the log: `pio device monitor -b 115200`.
+Or let the toolkit do it and check the result: `python3 Bringup/bringup.py flash chiku` (also `jinu`, `desk`, `probe`, `chiku-cam`).
+
+First start: the robot / desk opens a setup Wi-Fi (`Chiku-Setup`, `Jinu-Setup`, `Desk-Setup`); join it with the phone and enter your Wi-Fi.
+Later firmware updates can go over Wi-Fi: `http://chiku.local/update`, `http://jinu.local/update`, or the app (Settings, Update firmware).
+
+## Phone app
+
+```bash
+cd RobotApp && npm install && npx expo start      # scan the QR code with Expo Go (phone on the same Wi-Fi)
 ```
 
 ## Test
