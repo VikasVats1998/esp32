@@ -10,6 +10,7 @@
 #include "servo.h"
 #include "sonar.h"
 #include "camlink.h"
+#include "pads.h"
 #include "events.h"
 #include <lvgl.h>
 
@@ -114,6 +115,12 @@ void run() {
   int cm = sonar::distanceCm();
   snprintf(d, sizeof(d), "%d cm", cm);
   line("sonar", cm > 0, d);
+
+  snprintf(d, sizeof(d), "(touched now: 0x%02X)", pads::rawState());
+  line("pads", pads::expanderOnline(), d);
+  audio::say("hello", audio::BAB_HAPPY);
+  pump(2500);
+  line("voice", audio::hasClip("hello"), audio::hasClip("hello") ? "(clip played)" : "(no clip: babble)");
 
   strlcat(text, "\nDone. Touch to reboot.", sizeof(text));
   lv_label_set_text(report, text);

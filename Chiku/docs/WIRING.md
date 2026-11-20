@@ -15,7 +15,7 @@ The 8-pin header has **only 5 usable GPIOs** and **no I2C pins**:
 | 5 | GPIO43 (U0TXD) | UART TX  -> ESP32-CAM RX |
 | 6 | GPIO17 | external I2C **SDA** (PCA9685) |
 | 7 | GPIO18 | external I2C **SCL** (PCA9685) |
-| 8 | GPIO16 | TTP223 OUT |
+| 8 | GPIO16 | TTP223 **body** pad OUT |
 
 Everything else is used on the board (display 4-7/12/13/38/39, touch 11/40, SD 1-3,
 audio 8/9/10/42/45/46, onboard I2C 14/15, USB 19/20, BOOT 0, IMU INT 21, strapping/flash/PSRAM).
@@ -85,3 +85,21 @@ Connect all GNDs together (buck GND, PCA9685 GND, neck GND, ESP32-CAM GND).
 | GPIO12, GPIO0 | not used (strapping) |
 
 The cam UART is **not** UART0 (GPIO1/3), so the USB-TTL flashing adapter does not collide with the head.
+
+## Touch pads (5x TTP223) - ears, legs, body
+
+The header has no free pin for five pads, so only the **body (middle) pad** is on GPIO16.
+The other four use one **PCF8574** I2C expander on the same neck I2C wires (SDA = GPIO17, SCL = GPIO18,
+no extra neck wires). Put the PCF8574 module in the body, address **0x20** (A0, A1, A2 to GND). It does
+not clash with the PCA9685 (0x40). Use the **PCF8574** (0x20), not the PCF8574A (0x38).
+
+| Pad | Where | Connects to |
+|---|---|---|
+| Left ear (headphone) | head left | PCF8574 P0 |
+| Right ear (headphone) | head right | PCF8574 P1 |
+| Left leg | left leg | PCF8574 P2 |
+| Right leg | right leg | PCF8574 P3 |
+| Body | middle of the body | head GPIO16 (header pin 8) |
+
+Each TTP223: VCC to 3V3, GND to GND, OUT to the pin above (active HIGH, default TTP223 jumper settings).
+Wires to the ears/legs are touch lines: keep them short and away from the servo wires.

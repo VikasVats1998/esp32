@@ -11,6 +11,7 @@
 #include "storage.h"
 #include "display.h"
 #include "touch.h"
+#include "pads.h"
 #include "face.h"
 #include "ui.h"
 #include "behavior.h"
@@ -39,7 +40,7 @@ static void uiTask(void*) {
     while (xQueueReceive(uiQueue, &e, 0) == pdTRUE) {
       switch (e.type) {      // anything the user does counts as activity
         case events::EV_TOUCH_TAP: case events::EV_TOUCH_LONG: case events::EV_SWIPE:
-        case events::EV_SHAKE: case events::EV_PICKUP: case events::EV_PET:
+        case events::EV_SHAKE: case events::EV_PICKUP: case events::EV_PAD:
         case events::EV_TAP_IMU: case events::EV_ALARM_RING:
           power::activity();
           break;
@@ -90,7 +91,7 @@ static void sensorTask(void*) {
   for (;;) {
     uint32_t now = millis();
     imu::update();
-    touch::pollPet();
+    pads::update();
     camlink::update();
     sonar::update();
     if (now - lastSlow >= 200) {
@@ -129,6 +130,7 @@ void setup() {
 #if FEATURE_AUDIO
   if (!audio::init()) Serial.println("audio init failed");
 #endif
+  if (!pads::init()) Serial.println("PCF8574 (ear/leg pads) not found on GPIO17/18");
 #if FEATURE_SERVOS
   if (!servo::init()) Serial.println("PCA9685 not found on GPIO17/18");
 #endif
@@ -139,6 +141,7 @@ void setup() {
 
   ui::applyBrightness();
   audio::play(audio::MEL_STARTUP);
+  audio::say("hello", audio::BAB_HAPPY);
   xTaskCreatePinnedToCore(uiTask, "ui", 12288, nullptr, 3, nullptr, 1);
   xTaskCreatePinnedToCore(actuatorTask, "actuator", 4096, nullptr, 4, nullptr, 0);
   xTaskCreatePinnedToCore(sensorTask, "sensors", 6144, nullptr, 3, nullptr, 0);
@@ -149,8 +152,8 @@ void setup() {
 
 void loop() {
 #if DEBUG_HEAP_LOG
-  Serial.printf("[heap] free %u KB, PSRAM free %u KB, min heap %u KB\n", ESP.getFreeHeap() / 1024,
-                ESP.getFreePsram() / 1024, ESP.getMinFreeHeap() / 1024);
+  Serial.printf("[heap] free %lu KB, PSRAM free %lu KB, min heap %lu KB\n", (unsigned long)(ESP.getFreeHeap() / 1024),
+                (unsigned long)(ESP.getFreePsram() / 1024), (unsigned long)(ESP.getMinFreeHeap() / 1024));
 #endif
   vTaskDelay(pdMS_TO_TICKS(60000));
 }

@@ -45,7 +45,7 @@
 #define PIN_CAM_TX    43   // header pin 5  -> ESP32-CAM RX (GPIO13)
 #define PIN_I2C1_SDA  17   // header pin 6  external I2C -> PCA9685 SDA
 #define PIN_I2C1_SCL  18   // header pin 7  external I2C -> PCA9685 SCL
-#define PIN_TTP223    16   // header pin 8  touch sensor (digital, active HIGH)
+#define PIN_TTP223    16   // header pin 8  body (middle) touch pad, active HIGH
 // HC-SR04P: no free header pin left -> it is wired to the ESP32-CAM, which
 // sends the distance over UART (plan "a"). Set both to a GPIO number to read
 // the sonar directly on the head instead (-1 = not wired).
@@ -70,3 +70,19 @@
 #define SERVO_RIGHT_ANKLE 3
 #define SERVO_HEAD_PAN    4
 #define SERVO_COUNT       5
+
+// ---------------- Touch pads (5x TTP223, active HIGH) ---------------------------
+// Body pad: GPIO16 directly. Ears and legs: PCF8574 I2C expander on the external
+// bus (same SDA/SCL wires as the PCA9685), address 0x20 (A0-A2 to GND).
+#define I2C_ADDR_PCF8574 0x20
+#define PAD_EAR_L  0
+#define PAD_EAR_R  1
+#define PAD_LEG_L  2
+#define PAD_LEG_R  3
+#define PAD_BODY   4
+#define PAD_COUNT  5
+// PCF8574 bit for each pad (P0..P3); the body pad is GPIO16.
+#define PCF_BIT_EAR_L 0
+#define PCF_BIT_EAR_R 1
+#define PCF_BIT_LEG_L 2
+#define PCF_BIT_LEG_R 3

@@ -11,7 +11,9 @@ namespace face {
 
 enum Mood : uint8_t {
   M_NORMAL, M_HAPPY, M_SAD, M_SLEEPY, M_ANGRY, M_SURPRISED,
-  M_DIZZY, M_LOVE, M_THINKING, M_LISTENING, MOOD_COUNT
+  M_DIZZY, M_LOVE, M_THINKING, M_LISTENING,
+  M_JEALOUS, M_SULK, M_SHY, M_EXCITED, M_SCARED, M_CRY,   // "feelings"
+  MOOD_COUNT
 };
 
 enum Fx : uint8_t {

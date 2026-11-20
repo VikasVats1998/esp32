@@ -45,7 +45,30 @@ Press the cam RESET button, then `pio run -e cam -t upload`. Remove IO0-GND and 
 
 * Swipe left/right: Face, Clock, Weather, Timer, Sonar, Camera, Settings.
 * Tap: happy/surprised. Long press: menu (gaits, avoid mode, mood demo, calibration, Wi-Fi reset).
-* TTP223 touch: pet = love face + wiggle. Shake = dizzy. Picked up = surprised. Fall = servos released, sad.
+* Shake = dizzy. Picked up = surprised. Fall = servos released, sad.
+* **Five touch pads** (ears, legs, body), each with single / double / triple / long press:
+
+| Pad | 1 tap | 2 taps | 3 taps | Long press |
+|---|---|---|---|---|
+| Ear (left or right) | happy, tilts head | excited dance | shy (blush, looks away) | love (sways while held) |
+| Leg (left or right) | surprised hop | angry stomp | scared (trembles) | sulk (ruthna: turns away) |
+| Body (middle) | happy | jealous (green side-eye) | cry (tears) | love (purr, sways) |
+
+  Chiku also has feelings that build up: petting raises affection; poking a leg again and again makes it
+  annoyed, then angry, then it sulks. If ignored for 2 minutes it feels lonely. It does small cute things on
+  its own (curious head tilt, yawn, giggle). Edit the table in `behavior.cpp` (`onPad`) to change anything.
+* Faces: normal, happy, sad, sleepy, angry, surprised, dizzy, love, thinking, listening, jealous, sulk, shy,
+  excited, scared, cry (with tears, blush, sparkles, Zzz). Each feeling also has a servo "body language"
+  gait (happy, excited, angry, scared, sulk, jealous, shy, love, sad, surprised, tiltl, tiltr).
+
+## Voice
+
+Chiku speaks with short recorded lines (`data/voice/*.wav`, made by `tools/make_voice.sh` with espeak-ng):
+hello, happy, excited, shy, love, surprised, angry, sulk, scared, sad, jealous, alarm, timer, goodmorning.
+If a clip is missing it falls back to a synthesised "cute talk" babble that matches the feeling.
+Replace a clip with your own voice: web page -> Voice -> Upload (16 kHz, 16-bit, mono WAV with the same name;
+ffmpeg command is in `tools/make_voice.sh`). The `uploadfs` step puts the default clips on the head.
+Not included: speaking arbitrary text (needs online text-to-speech) and listening (the microphones are not used yet).
 * Alarm / timer: ring animation, melody and head shake. Stop with a tap or by shaking.
 * After 30 s the screen dims, after 5 min the face sleeps (wake: touch, shake, alarm).
 
@@ -68,9 +91,10 @@ cam link, sonar. The report is shown on screen and on the serial port (115200). 
 | `servo` | PCA9685, easing, stagger, idle power-off |
 | `motion` | Otto-style gaits, obstacle stop |
 | `imu` | shake, pick-up, tilt, tap, fall |
-| `touch` | screen gestures + TTP223 |
+| `touch` | screen gestures (CST9217) |
+| `pads` | 5 touch pads: ears, legs, body; tap/double/triple/long |
 | `rtc_time`, `alarm_timer`, `weather` | time, alarms/timers/stopwatch, forecast |
-| `audio` | ES8311 + synthesised beeps/melodies |
+| `audio` | ES8311: beeps, melodies, cute-talk babble, WAV voice clips |
 | `sonar`, `camlink` | distance filter, UART protocol to the cam |
 | `net` | Wi-Fi portal, mDNS, web API, OTA |
 | `power` | dim/sleep, CPU frequency, battery |

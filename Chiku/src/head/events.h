@@ -12,7 +12,7 @@ enum Type : uint8_t {
   EV_TOUCH_TAP,      // a=x b=y
   EV_TOUCH_LONG,     // a=x b=y
   EV_SWIPE,          // a=+1 left->right swipe, -1 right->left
-  EV_PET,            // a=1 stroke started, 0 stopped (TTP223)
+  EV_PAD,            // a=pad id (PAD_*), b=pads::Gesture
   // imu
   EV_SHAKE, EV_PICKUP, EV_PUTDOWN, EV_FALL, EV_TAP_IMU,
   EV_TILT,           // a=roll deg b=pitch deg

@@ -43,8 +43,9 @@
 #define SERVO_MAX_SPEED_DPS  300.f // deg/s limit
 #define SERVO_STAGGER_MS      40   // start delay between servos (avoid current spikes)
 #define SERVO_SOFTSTART_DPS   40.f // speed of the first move after boot
-// 1 = servo is mounted mirrored (angle is reversed)
-#define SERVO_INVERT_DEFAULT { 0, 1, 0, 1, 0 }
+// 1 = reverse this servo (use the calibration screen). Gait tables are Otto style:
+// the same sign on both ankles leans the body to one side.
+#define SERVO_INVERT_DEFAULT { 0, 0, 0, 0, 0 }
 
 // ---- Sensors ----
 #define OBSTACLE_STOP_CM      10

@@ -5,13 +5,20 @@
 namespace bus {
 
 static SemaphoreHandle_t mtx = nullptr;
+static SemaphoreHandle_t mtx1 = nullptr;
 
 void init() {
   if (mtx) return;
   mtx = xSemaphoreCreateRecursiveMutex();
   Wire.begin(PIN_I2C0_SDA, PIN_I2C0_SCL, 400000);
   Wire.setTimeOut(20);
+  mtx1 = xSemaphoreCreateRecursiveMutex();
+  Wire1.begin(PIN_I2C1_SDA, PIN_I2C1_SCL, 400000);
+  Wire1.setTimeOut(20);
 }
+
+void lock1() { xSemaphoreTakeRecursive(mtx1, portMAX_DELAY); }
+void unlock1() { xSemaphoreGiveRecursive(mtx1); }
 
 void lock() { xSemaphoreTakeRecursive(mtx, portMAX_DELAY); }
 void unlock() { xSemaphoreGiveRecursive(mtx); }

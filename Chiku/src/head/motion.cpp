@@ -7,27 +7,43 @@
 
 namespace motion {
 
-// Oscillator order: LEFT_HIP, RIGHT_HIP, LEFT_ANKLE, RIGHT_ANKLE
+// Oscillator order: LEFT_HIP, RIGHT_HIP, LEFT_ANKLE, RIGHT_ANKLE, HEAD_PAN.
+// Pan: if amp and offset are both 0 the gait leaves the head alone (it keeps
+// following the look direction). Otherwise pan = 90 + off + amp*sin(...).
 struct GaitDef {
   const char* name;
-  float amp[4];     // degrees
-  float off[4];     // degrees around 90
-  float phase[4];   // degrees
+  float amp[5];     // degrees
+  float off[5];     // degrees around 90
+  float phase[5];   // degrees
   uint16_t period;  // ms per cycle
 };
 
 static const GaitDef GAITS[G_COUNT] = {
-  {"home",      { 0,  0,  0,  0}, { 0,  0,  0,  0}, {  0,   0,   0,   0}, 600},
-  {"walk",      {28, 28, 18, 18}, { 0,  0,  4, -4}, {  0,   0,  90,  90}, 900},
-  {"back",      {28, 28, 18, 18}, { 0,  0,  4, -4}, {  0,   0, -90, -90}, 900},
-  {"left",      {10, 30, 18, 18}, { 0,  0,  4, -4}, {  0,   0,  90,  90}, 900},
-  {"right",     {30, 10, 18, 18}, { 0,  0,  4, -4}, {  0,   0,  90,  90}, 900},
-  {"bend",      { 0,  0,  0,  0}, { 0,  0, 38,  38}, {  0,   0,   0,   0}, 1400},
-  {"shakeleg",  { 0, 25,  0,  0}, { 0,  0, 35,  35}, {  0,   0,   0,   0}, 400},
-  {"moonwalk",  {20, 20, 22, 22}, { 0,  0, 10, -10}, {  0, 180, -75,  75}, 1000},
-  {"dance",     {25, 25, 30, 30}, { 0,  0,  0,   0}, {  0, 180,  90, 270}, 700},
-  {"jump",      { 0,  0, 35, 35}, { 0,  0,  0,   0}, {  0,   0,   0,   0}, 500},
-  {"wiggle",    { 0,  0, 18, 18}, { 0,  0,  0,   0}, {  0,   0,   0, 180}, 350},
+  //  name        amp                    off                     phase                  period
+  {"home",      { 0,  0,  0,  0,  0}, { 0,  0,  0,  0,  0}, {  0,   0,   0,   0,   0},  600},
+  {"walk",      {28, 28, 18, 18,  0}, { 0,  0,  4, -4,  0}, {  0,   0,  90,  90,   0},  900},
+  {"back",      {28, 28, 18, 18,  0}, { 0,  0,  4, -4,  0}, {  0,   0, -90, -90,   0},  900},
+  {"left",      {10, 30, 18, 18,  0}, { 0,  0,  4, -4,  0}, {  0,   0,  90,  90,   0},  900},
+  {"right",     {30, 10, 18, 18,  0}, { 0,  0,  4, -4,  0}, {  0,   0,  90,  90,   0},  900},
+  {"bend",      { 0,  0,  0,  0,  0}, { 0,  0, 38, 38,  0}, {  0,   0,   0,   0,   0}, 1400},
+  {"shakeleg",  { 0, 25,  0,  0,  0}, { 0,  0, 35, 35,  0}, {  0,   0,   0,   0,   0},  400},
+  {"moonwalk",  {20, 20, 22, 22,  0}, { 0,  0, 10,-10,  0}, {  0, 180, -75,  75,   0}, 1000},
+  {"dance",     {25, 25, 30, 30, 30}, { 0,  0,  0,  0,  0}, {  0, 180,  90, 270,   0},  700},
+  {"jump",      { 0,  0, 35, 35,  0}, { 0,  0,  0,  0,  0}, {  0,   0,   0,   0,   0},  500},
+  {"wiggle",    { 0,  0, 18, 18,  0}, { 0,  0,  0,  0,  0}, {  0,   0,   0, 180,   0},  350},
+  // ---- emotions ----
+  {"happy",     { 0,  0, 15, 15, 20}, { 0,  0,  0,  0,  0}, {  0,   0,   0, 180,  90},  520},  // rock + head wave
+  {"excited",   {12, 12, 26, 26, 32}, { 0,  0,  0,  0,  0}, {  0, 180,   0, 180,  90},  320},  // fast bouncy dance
+  {"angry",     { 0,  0, 24, 24, 12}, { 0,  0,  8,  8,  0}, {  0,   0,   0, 180,   0},  280},  // stomp, head shake
+  {"scared",    { 4,  4,  5,  5,  7}, {-8, -8,-10,-10,  0}, {  0,  90,   0,  90,   0},  120},  // tremble, lean back
+  {"sulk",      { 0,  0,  0,  0,  0}, { 0,  0, 16, 16,-55}, {  0,   0,   0,   0,   0}, 1500},  // turn away (ruthna)
+  {"jealous",   { 0,  0,  0, 12,  0}, { 0,  0,  6,  0, 42}, {  0,   0,   0,   0,   0},  300},  // side glance, foot tap
+  {"shy",       { 0,  0,  0,  0,  6}, { 0,  0, 18, 18,-32}, {  0,   0,   0,   0,   0}, 1100},  // look away, small
+  {"love",      { 0,  0, 12, 12, 16}, { 0,  0,  0,  0,  0}, {  0,   0,   0, 180,  90}, 1700},  // slow sway
+  {"sad",       { 0,  0,  0,  0,  8}, { 0,  0, 20, 20,  0}, {  0,   0,   0,   0,   0}, 2000},  // droop, slow "no"
+  {"surprised", { 0,  0, 40, 40,  0}, { 0,  0,  0,  0,  0}, {  0,   0,   0,   0,   0},  420},  // quick hop
+  {"tiltl",     { 0,  0,  0,  0,  0}, { 0,  0, 12, 12,-28}, {  0,   0,   0,   0,   0}, 1200},  // curious tilt
+  {"tiltr",     { 0,  0,  0,  0,  0}, { 0,  0,-12,-12, 28}, {  0,   0,   0,   0,   0}, 1200},
 };
 static const uint8_t HW[4] = {SERVO_LEFT_HIP, SERVO_RIGHT_HIP, SERVO_LEFT_ANKLE, SERVO_RIGHT_ANKLE};
 
@@ -52,10 +68,16 @@ static uint32_t avoidStep = 0;   // small state machine for avoid mode
 static uint32_t avoidUntil = 0;
 static uint32_t idleSince = 0;
 static float panTarget = 90;
+static float lastPan = -1;
 
 void init() { q = events::subscribe(12); }
 
-void start(Gait g, uint8_t cycles) { reqGait = g; reqCycles = cycles; reqFlag = true; }
+void start(Gait g, uint8_t cycles) {
+  if (g >= G_COUNT) g = G_HOME;
+  reqGait = g;
+  reqCycles = cycles;
+  reqFlag = true;
+}
 void stop() { reqGait = G_HOME; reqCycles = 1; reqFlag = true; }
 bool busy() { return running; }
 Gait current() { return gait; }
@@ -142,16 +164,18 @@ void update(uint32_t dtMs) {
       for (int i = 0; i < 4; i++) {
         float ph = 2.f * PI * (t / d.period) + d.phase[i] * DEG_TO_RAD;
         float a = 90.f + (d.off[i] + d.amp[i] * sinf(ph)) * ramp;
-        // Mirror the right side so "forward" is the same for both legs
-        if (i == 1 || i == 3) a = 90.f - (a - 90.f);
         servo::setTargetNow(HW[i], a);
       }
-      if (gait == G_DANCE) panTarget = 90.f + 30.f * sinf(2.f * PI * t / d.period);
+      if (d.amp[4] != 0 || d.off[4] != 0) {          // this gait also moves the head
+        float ph = 2.f * PI * (t / d.period) + d.phase[4] * DEG_TO_RAD;
+        float a = 90.f + (d.off[4] + d.amp[4] * sinf(ph)) * ramp;
+        servo::setTargetNow(SERVO_HEAD_PAN, a);
+        lastPan = a; panTarget = a;                  // so the follow-look code does not fight it
+      }
     }
     idleSince = now;
   }
   // Head pan always follows its target gently
-  static float lastPan = -1;
   if (fabsf(panTarget - lastPan) > 1.f) {
     servo::setTarget(SERVO_HEAD_PAN, panTarget, 140);
     lastPan = panTarget;

@@ -201,7 +201,27 @@ static void handleUpdateUpload() {
   }
 }
 
+static File voiceFile;
+static void handleVoiceUpload() {
+  HTTPUpload& up = server.upload();
+  if (up.status == UPLOAD_FILE_START) {
+    String name = up.filename;
+    name = name.substring(name.lastIndexOf('/') + 1);            // no folders
+    if (!name.endsWith(".wav") || name.length() > 30) return;
+    LittleFS.mkdir("/voice");
+    voiceFile = LittleFS.open("/voice/" + name, "w");
+  } else if (up.status == UPLOAD_FILE_WRITE && voiceFile) {
+    voiceFile.write(up.buf, up.currentSize);
+  } else if (up.status == UPLOAD_FILE_END && voiceFile) {
+    voiceFile.close();
+  }
+}
+
 static void setupRoutes() {
+  server.on("/api/say", HTTP_POST, []() {
+    audio::say(server.arg("key").c_str(), audio::BAB_HAPPY); ok();
+  });
+  server.on("/api/voice", HTTP_POST, []() { server.send(200, "text/plain", "uploaded"); }, handleVoiceUpload);
   server.on("/", HTTP_GET, handleRoot);
   server.on("/api/state", HTTP_GET, handleState);
   server.on("/api/set", HTTP_POST, handleSet);

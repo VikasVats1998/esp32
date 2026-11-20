@@ -10,7 +10,11 @@ namespace motion {
 
 enum Gait : uint8_t {
   G_HOME, G_WALK, G_BACK, G_TURN_L, G_TURN_R, G_BEND, G_SHAKE_LEG,
-  G_MOONWALK, G_DANCE, G_JUMP, G_WIGGLE, G_COUNT
+  G_MOONWALK, G_DANCE, G_JUMP, G_WIGGLE,
+  // emotions: body language that goes with a face mood
+  G_HAPPY, G_EXCITED, G_ANGRY, G_SCARED, G_SULK, G_JEALOUS, G_SHY, G_LOVE, G_SAD, G_SURPRISED,
+  G_TILT_L, G_TILT_R,                      // curious head tilt towards left / right
+  G_COUNT
 };
 
 void init();

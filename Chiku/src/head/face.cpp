@@ -31,10 +31,17 @@ static const MoodDef MOODS[MOOD_COUNT] = {
   /* LOVE      */ {110, 110, 0.50f, 0.00f,   0, 0.00f,   0, 0xFF5C9A, 0, 1, 0, 0},
   /* THINKING  */ {104, 136, 0.45f, 0.22f,   9, 0.00f,   0, 0xC080FF, 0, 0, 0.7f, -0.7f},
   /* LISTENING */ {124, 172, 0.50f, 0.00f,   0, 0.00f,  -8, 0x40FFD0, 0, 0, 0, 0},
+  /* JEALOUS   */ {104, 128, 0.45f, 0.34f,  14, 0.00f,   6, 0x60D060, 0, 0, 0.9f, 0.05f},   // green side-eye
+  /* SULK      */ { 98, 118, 0.50f, 0.46f, -10, 0.00f,  22, 0x7080A0, 0, 0, -0.9f, 0.5f},   // ruthna: looks away
+  /* SHY       */ { 94, 118, 0.50f, 0.12f,  -8, 0.30f,  16, 0xFFA0C0, 0, 0, -0.6f, 0.7f},   // + blush
+  /* EXCITED   */ {132, 150, 0.50f, 0.00f,   0, 0.50f, -12, 0xFFE060, 0, 0, 999, 999},      // + sparkles
+  /* SCARED    */ {116, 176, 0.50f, 0.00f,   0, 0.00f,   0, 0xE0E8FF, 0, 0, 0, -0.1f},      // + trembling
+  /* CRY       */ {110, 134, 0.50f, 0.36f, -22, 0.00f,  24, 0x70A0FF, 0, 0, 0, 0.45f},      // + tears
 };
 
 static const char* MOOD_NAMES[MOOD_COUNT] = {
-  "normal", "happy", "sad", "sleepy", "angry", "surprised", "dizzy", "love", "thinking", "listening"};
+  "normal", "happy", "sad", "sleepy", "angry", "surprised", "dizzy", "love", "thinking", "listening",
+  "jealous", "sulk", "shy", "excited", "scared", "cry"};
 const char* moodName(Mood m) { return m < MOOD_COUNT ? MOOD_NAMES[m] : "?"; }
 
 // ---------- state ----------
@@ -77,6 +84,17 @@ struct Particle { lv_obj_t* o; float x, y, vx, vy, life; };
 static const int NP = 14;
 static Particle parts[NP];
 static lv_obj_t* flashObj = nullptr;
+
+// Mood effects: tears, blush, sparkles, "z z z"
+struct MoodFx {
+  lv_obj_t* tear[2];
+  lv_obj_t* blush[2];
+  lv_obj_t* spark[4];
+  lv_obj_t* zz[3];
+  float tearY[2], sparkLife[4], sparkX[4], sparkY[4], zLife[3], blushAmt;
+};
+static MoodFx mf;
+static float eyeCx[2] = {CX - 95, CX + 95}, eyeCy[2] = {EYE_CY, EYE_CY}, eyeW[2] = {110, 110}, eyeH[2] = {150, 150};
 static Fx shownFx = FX_NONE;
 static uint32_t nextFlash = 4000;
 static float flashOpa = 0;
@@ -130,6 +148,31 @@ lv_obj_t* create(lv_obj_t* parent) {
   for (int i = 0; i < NP; i++) {
     parts[i].o = rect(root);
     lv_obj_add_flag(parts[i].o, LV_OBJ_FLAG_HIDDEN);
+  }
+  for (int i = 0; i < 2; i++) {
+    mf.tear[i] = circle(root, 14, 0x70B0FF);
+    lv_obj_add_flag(mf.tear[i], LV_OBJ_FLAG_HIDDEN);
+    mf.blush[i] = circle(root, 44, 0xFF6090);
+    lv_obj_set_style_bg_opa(mf.blush[i], LV_OPA_TRANSP, 0);
+    mf.tearY[i] = i * 35;
+  }
+  for (int i = 0; i < 4; i++) {
+    mf.spark[i] = rect(root);
+    lv_obj_set_size(mf.spark[i], 12, 12);
+    lv_obj_set_style_bg_color(mf.spark[i], lv_color_hex(0xFFF0A0), 0);
+    lv_obj_set_style_transform_pivot_x(mf.spark[i], 6, 0);
+    lv_obj_set_style_transform_pivot_y(mf.spark[i], 6, 0);
+    lv_obj_set_style_transform_rotation(mf.spark[i], 450, 0);
+    lv_obj_add_flag(mf.spark[i], LV_OBJ_FLAG_HIDDEN);
+    mf.sparkLife[i] = i * 0.25f;
+  }
+  for (int i = 0; i < 3; i++) {
+    mf.zz[i] = lv_label_create(root);
+    lv_label_set_text(mf.zz[i], "z");
+    lv_obj_set_style_text_font(mf.zz[i], &lv_font_montserrat_28, 0);
+    lv_obj_set_style_text_color(mf.zz[i], lv_color_hex(0x9AB0D0), 0);
+    lv_obj_add_flag(mf.zz[i], LV_OBJ_FLAG_HIDDEN);
+    mf.zLife[i] = i * 0.33f;
   }
   flashObj = rect(root);
   lv_obj_set_size(flashObj, LCD_W, LCD_H);
@@ -279,6 +322,57 @@ static void updateFx(float dt) {
   }
 }
 
+// ---------- mood effects ----------
+static void updateMoodFx(float dt, Mood m) {
+  bool cry = (m == M_CRY), sad = (m == M_SAD) || cry;
+  bool sleepy = (m == M_SLEEPY) || sleeping;
+  bool excited = (m == M_EXCITED);
+  // tears: a drop slides down from under each eye
+  for (int i = 0; i < 2; i++) {
+    if (!sad) { lv_obj_add_flag(mf.tear[i], LV_OBJ_FLAG_HIDDEN); continue; }
+    mf.tearY[i] += dt * (cry ? 140.f : 70.f);
+    if (mf.tearY[i] > 90) mf.tearY[i] = 0;
+    float x = eyeCx[i] + (i == 0 ? -1 : 1) * eyeW[i] * 0.2f;
+    float y = eyeCy[i] + eyeH[i] * 0.45f + mf.tearY[i];
+    lv_obj_remove_flag(mf.tear[i], LV_OBJ_FLAG_HIDDEN);
+    lv_obj_set_pos(mf.tear[i], (int)x - 7, (int)y);
+    lv_obj_set_style_opa(mf.tear[i], (lv_opa_t)(255 * (1.f - mf.tearY[i] / 95.f)), 0);
+  }
+  // blush: pink cheeks fade in for shy / love / a little for happy
+  float tb = (m == M_SHY) ? 1.f : (m == M_LOVE) ? 0.7f : (m == M_HAPPY || excited) ? 0.3f : 0.f;
+  mf.blushAmt += (tb - mf.blushAmt) * fminf(1.f, dt * 6);
+  for (int i = 0; i < 2; i++) {
+    lv_obj_set_pos(mf.blush[i], (int)(eyeCx[i] + (i == 0 ? -1 : 1) * 20 - 22), (int)(eyeCy[i] + eyeH[i] * 0.5f + 8));
+    lv_obj_set_size(mf.blush[i], 52, 30);
+    lv_obj_set_style_bg_opa(mf.blush[i], (lv_opa_t)(mf.blushAmt * 150), 0);
+  }
+  // sparkles: little stars pop around the eyes when excited
+  for (int i = 0; i < 4; i++) {
+    if (!excited) { lv_obj_add_flag(mf.spark[i], LV_OBJ_FLAG_HIDDEN); continue; }
+    mf.sparkLife[i] += dt * 1.6f;
+    if (mf.sparkLife[i] > 1.f) {
+      mf.sparkLife[i] = 0;
+      int side = (i & 1) ? 1 : -1;
+      mf.sparkX[i] = CX + side * random(60, 190);
+      mf.sparkY[i] = EYE_CY + random(-110, 60);
+    }
+    lv_obj_remove_flag(mf.spark[i], LV_OBJ_FLAG_HIDDEN);
+    lv_obj_set_pos(mf.spark[i], (int)mf.sparkX[i], (int)mf.sparkY[i]);
+    float s = sinf(3.14159f * mf.sparkLife[i]);
+    lv_obj_set_style_opa(mf.spark[i], (lv_opa_t)(255 * s), 0);
+    lv_obj_set_style_transform_scale(mf.spark[i], (int)(80 + 200 * s), 0);
+  }
+  // z z z: rise from the right eye while sleepy
+  for (int i = 0; i < 3; i++) {
+    if (!sleepy) { lv_obj_add_flag(mf.zz[i], LV_OBJ_FLAG_HIDDEN); continue; }
+    mf.zLife[i] += dt * 0.35f;
+    if (mf.zLife[i] > 1.f) mf.zLife[i] = 0;
+    lv_obj_remove_flag(mf.zz[i], LV_OBJ_FLAG_HIDDEN);
+    lv_obj_set_pos(mf.zz[i], (int)(CX + 120 + mf.zLife[i] * 50 + i * 12), (int)(EYE_CY - 40 - mf.zLife[i] * 120));
+    lv_obj_set_style_text_opa(mf.zz[i], (lv_opa_t)(255 * sinf(3.14159f * mf.zLife[i])), 0);
+  }
+}
+
 // ---------- main update ----------
 void update(uint32_t dtMs) {
   if (!root) return;
@@ -355,6 +449,7 @@ void update(uint32_t dtMs) {
   float heartPulse = 1.f + 0.12f * sinf(pulse * 1.6f);
   float jitterX = 0;
   if (shaking) jitterX = sinf(pulse * 9) * 9;
+  else if (mood == M_SCARED && !sleeping) jitterX = sinf(pulse * 22) * 4;
   else if (fx == FX_COLD && !sleeping) jitterX = sinf(pulse * 8) * 3;
   float lis = (mood == M_LISTENING) ? 1.f + 0.05f * sinf(pulse * 1.3f) : 1.f;
 
@@ -369,6 +464,7 @@ void update(uint32_t dtMs) {
     if (h < 6) h = 6;
     float ecx = CX + side * EYE_GAP / 2 + lookX * 28 + jitterX;
     float ecy = EYE_CY + cy + lookY * 22 + (mood == M_DIZZY ? sinf(pulse) * 6 : 0);
+    eyeCx[i] = ecx; eyeCy[i] = ecy; eyeW[i] = w; eyeH[i] = h;
     int iw = (int)w, ih = (int)h;
     lv_obj_set_size(e.body, iw, ih);
     lv_obj_set_pos(e.body, (int)(ecx - w / 2), (int)(ecy - h / 2));
@@ -402,6 +498,7 @@ void update(uint32_t dtMs) {
   }
 
   updateFx(dt);
+  updateMoodFx(dt, sleeping ? M_SLEEPY : mood);
 }
 
 }  // namespace face

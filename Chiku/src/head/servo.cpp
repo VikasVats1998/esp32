@@ -2,6 +2,7 @@
 #include "servo.h"
 #include "config.h"
 #include "storage.h"
+#include "bus.h"
 #include <Wire.h>
 #include <math.h>
 
@@ -26,8 +27,8 @@ struct Ch {
 static Ch ch[SERVO_COUNT];
 static uint32_t lastMoveMs = 0;
 static uint32_t staggerSlot = 0;
-static SemaphoreHandle_t mtx = nullptr;   // update() and calibration may run in different tasks
-struct Lock { Lock() { if (mtx) xSemaphoreTakeRecursive(mtx, portMAX_DELAY); } ~Lock() { if (mtx) xSemaphoreGiveRecursive(mtx); } };
+// Wire1 is shared with the touch expander, so every access takes the bus-1 lock.
+struct Lock { Lock() { bus::lock1(); } ~Lock() { bus::unlock1(); } };
 
 static bool write8(uint8_t reg, uint8_t v) {
   Wire1.beginTransmission(I2C_ADDR_PCA9685);
@@ -84,9 +85,7 @@ static void output(uint8_t c) {
 
 bool init() {
   if (PIN_PCA_OE >= 0) { pinMode(PIN_PCA_OE, OUTPUT); digitalWrite(PIN_PCA_OE, HIGH); }
-  mtx = xSemaphoreCreateRecursiveMutex();
-  Wire1.begin(PIN_I2C1_SDA, PIN_I2C1_SCL, 400000);
-  Wire1.setTimeOut(20);
+  Lock lk;
   Wire1.beginTransmission(I2C_ADDR_PCA9685);
   ok = Wire1.endTransmission() == 0;
   if (!ok) return false;

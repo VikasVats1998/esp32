@@ -11,6 +11,7 @@
 #include "weather.h"
 #include "storage.h"
 #include "camlink.h"
+#include "pads.h"
 
 namespace behavior {
 
@@ -46,7 +47,108 @@ static void applyWeather() {
   }
 }
 
-void init() {}
+// ---------- feelings engine ----------
+// affection: goes up when petted, slowly fades.   annoyance: goes up with leg pokes.
+// lastTouch: used to feel lonely when ignored.
+static float affection = 20, annoyance = 0;
+static uint32_t lastTouch = 0, nextIdle = 0, lonelyAt = 0;
+static uint32_t calmUntil = 0;       // ignore idle actions until then
+static uint32_t stopMoveAt = 0;      // ends a long (looping) emote
+
+static void emote(face::Mood m, uint32_t faceMs, motion::Gait g, uint8_t cycles, audio::Babble talk,
+                  const char* clip = nullptr) {
+  face::setMood(m, faceMs);
+  events::publish(events::EV_MOTION_CMD, g, cycles);
+  if (clip) audio::say(clip, talk); else audio::babble(talk, 3);
+  calmUntil = millis() + 4000;
+}
+
+// What each pad does. ears: friendly. legs: poking (can annoy). body: cuddle/drama.
+static void onPad(int pad, int gesture) {
+  uint32_t now = millis();
+  lastTouch = now;
+  using namespace pads;
+  int side = (pad == PAD_EAR_L || pad == PAD_LEG_L) ? -1 : 1;
+  bool ear = pad == PAD_EAR_L || pad == PAD_EAR_R;
+  bool leg = pad == PAD_LEG_L || pad == PAD_LEG_R;
+  if (alarm_timer::ringing()) { alarm_timer::stop(); return; }
+
+  if (ear || pad == PAD_BODY) { affection = fminf(100, affection + (gesture == LONG_START ? 15 : 8)); annoyance *= 0.7f; }
+  if (leg && gesture != LONG_END) annoyance = fminf(120, annoyance + 22);
+
+  if (gesture == LONG_END) {                       // hand lifted after a long press
+    motion::stop();
+    face::setMood(pad == PAD_LEG_L || pad == PAD_LEG_R ? face::M_SULK : face::M_LOVE, 1800);
+    return;
+  }
+  // Pushed too far: legs poked again and again -> cross, then ruthna (sulk)
+  if (leg && annoyance > 95) {
+    annoyance = 40;
+    emote(face::M_ANGRY, 2500, motion::G_ANGRY, 3, audio::BAB_ANGRY, "angry");
+    nextIdle = now + 9000;
+    stopMoveAt = 0;
+    return;
+  }
+  if (leg && annoyance > 60 && gesture == TAP1) {
+    emote(face::M_SULK, 4500, motion::G_SULK, 3, audio::BAB_SAD, "sulk");
+    return;
+  }
+  face::lookAt(side * 0.8f, 0);
+  switch (pad) {
+    case PAD_EAR_L: case PAD_EAR_R:
+      switch (gesture) {
+        case TAP1: emote(face::M_HAPPY, 2200, side < 0 ? motion::G_TILT_L : motion::G_TILT_R, 1, audio::BAB_HAPPY, "happy"); break;
+        case TAP2: emote(face::M_EXCITED, 3200, motion::G_EXCITED, 5, audio::BAB_HAPPY, "excited"); break;
+        case TAP3: emote(face::M_SHY, 3500, motion::G_SHY, 3, audio::BAB_SHY, "shy"); break;
+        case LONG_START: face::setMood(face::M_LOVE, 0); events::publish(events::EV_MOTION_CMD, motion::G_LOVE, 25);
+                         audio::say("love", audio::BAB_LOVE); break;
+      }
+      break;
+    case PAD_LEG_L: case PAD_LEG_R:
+      switch (gesture) {
+        case TAP1: emote(face::M_SURPRISED, 1600, motion::G_SURPRISED, 1, audio::BAB_SURPRISE, "surprised"); break;
+        case TAP2: emote(face::M_ANGRY, 2500, motion::G_ANGRY, 3, audio::BAB_ANGRY, "angry"); annoyance += 15; break;
+        case TAP3: emote(face::M_SCARED, 3200, motion::G_SCARED, 12, audio::BAB_SURPRISE, "scared"); break;
+        case LONG_START: emote(face::M_SULK, 0, motion::G_SULK, 8, audio::BAB_SAD, "sulk"); break;
+      }
+      break;
+    case PAD_BODY:
+      switch (gesture) {
+        case TAP1: emote(face::M_HAPPY, 2200, motion::G_HAPPY, 3, audio::BAB_HAPPY, "happy"); break;
+        case TAP2: emote(face::M_JEALOUS, 3800, motion::G_JEALOUS, 5, audio::BAB_QUESTION, "jealous"); break;
+        case TAP3: emote(face::M_CRY, 3500, motion::G_SAD, 2, audio::BAB_SAD, "sad"); break;
+        case LONG_START: face::setMood(face::M_LOVE, 0); events::publish(events::EV_MOTION_CMD, motion::G_LOVE, 25);
+                         audio::say("love", audio::BAB_LOVE); break;
+      }
+      break;
+  }
+}
+
+// Small things Chiku does on its own so it feels alive.
+static void idleLife(uint32_t now) {
+  if (now < nextIdle || now < calmUntil) return;
+  if (power::state() != power::ACTIVE || alarm_timer::ringing() || ui::current() != ui::S_FACE) return;
+  nextIdle = now + random(25000, 50000);
+  // Ignored for a long time: lonely
+  if (lastTouch && now - lastTouch > 120000UL) {
+    face::setMood(face::M_SAD, 3500);
+    audio::babble(audio::BAB_SAD, 2);
+    events::publish(events::EV_MOTION_CMD, motion::G_SAD, 1);
+    return;
+  }
+  switch (random(0, 6)) {
+    case 0: face::setMood(face::M_THINKING, 2500); events::publish(events::EV_MOTION_CMD, motion::G_TILT_L, 1); break;
+    case 1: face::setMood(face::M_HAPPY, 1500); audio::babble(audio::BAB_HAPPY, 2); break;
+    case 2: face::setMood(face::M_SLEEPY, 2500); break;                          // yawn
+    case 3: face::setMood(affection > 60 ? face::M_LOVE : face::M_HAPPY, 2000);
+            events::publish(events::EV_MOTION_CMD, motion::G_LOVE, 1); break;
+    case 4: face::setMood(face::M_THINKING, 2500); events::publish(events::EV_MOTION_CMD, motion::G_TILT_R, 1);
+            audio::babble(audio::BAB_QUESTION, 3); break;
+    default: break;
+  }
+}
+
+void init() { lastTouch = millis(); nextIdle = millis() + 30000; }
 
 void onEvent(const events::Event& e) {
   using namespace events;
@@ -75,17 +177,7 @@ void onEvent(const events::Event& e) {
       face::setMood(face::M_SAD, 5000);
       audio::play(audio::MEL_SAD);
       break;
-    case EV_PET:
-      if (e.a) {
-        petting = true;
-        face::setMood(face::M_LOVE, 0);
-        audio::play(audio::MEL_PET);
-        events::publish(EV_MOTION_CMD, motion::G_WIGGLE, 3);
-      } else {
-        petting = false;
-        face::setMood(face::M_LOVE, 1500);
-      }
-      break;
+    case EV_PAD: onPad(e.a, e.b); break;
     case EV_OBSTACLE:
       face::setMood(face::M_SURPRISED, 1000);
       break;
@@ -94,6 +186,7 @@ void onEvent(const events::Event& e) {
       ui::show(ui::S_FACE);
       face::setMood(face::M_SURPRISED, 0);
       face::setShake(true);
+      audio::say(e.a >= 100 ? "timer" : "alarm", audio::BAB_SURPRISE);   // spoken line first
       audio::play(e.a >= 100 ? audio::MEL_TIMER : audio::MEL_ALARM, true);
       break;
     case EV_ALARM_STOP:
@@ -109,6 +202,7 @@ void onEvent(const events::Event& e) {
       break;
     case EV_WAKE:
       face::setMood(face::M_HAPPY, 1200);
+      audio::say("hello", audio::BAB_HAPPY);
       break;
     case EV_SETTINGS:
       audio::setVolume(storage::get().volume);
@@ -119,6 +213,10 @@ void onEvent(const events::Event& e) {
 }
 
 void update(uint32_t dtMs) {
+  // feelings fade slowly
+  affection = fmaxf(0, affection - dtMs * 0.0003f);
+  annoyance = fmaxf(0, annoyance - dtMs * 0.006f);
+  idleLife(millis());
   // While ringing: shake the head left and right
   if (alarm_timer::ringing()) {
     ringTick += dtMs;

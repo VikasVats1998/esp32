@@ -34,6 +34,12 @@ button{background:#2a6fd0;color:#fff;cursor:pointer} button.g{background:#2f3b52
 <div class="row"><button class="g" onclick="post('/api/motion?avoid=1')">Avoid mode on</button>
 <button class="g" onclick="post('/api/motion?avoid=0')">off</button></div></section>
 
+<section><h2>Feelings (face + body + voice)</h2><div class="row" id="emotes"></div></section>
+
+<section><h2>Voice</h2><div class="row" id="say"></div>
+<div class="small">Clips are 16 kHz 16-bit WAV files named like the buttons. Upload your own to replace one (same name):</div>
+<form id="up" class="row"><input type="file" id="wav" accept=".wav" style="width:auto"><button type="button" onclick="upload()">Upload</button></form></section>
+
 <section><h2>Servo trims</h2><div id="servos"></div>
 <div class="row"><button onclick="saveServos()">Save trims</button></div>
 <div class="small">Test moves the servo to 90 degrees (with trim).</div></section>
@@ -52,6 +58,8 @@ button{background:#2a6fd0;color:#fff;cursor:pointer} button.g{background:#2f3b52
 const $=id=>document.getElementById(id);
 const NAMES=['Left hip','Right hip','Left ankle','Right ankle','Head pan'];
 const MOVES=['home','walk','back','left','right','bend','shakeleg','moonwalk','dance','jump','wiggle'];
+const EMOTES=['happy','excited','angry','scared','sulk','jealous','shy','love','sad','surprised','tiltl','tiltr'];
+const SAY=['hello','happy','excited','shy','love','surprised','angry','sulk','scared','sad','jealous','alarm','timer','goodmorning'];
 const DAYS=['Mo','Tu','We','Th','Fr','Sa','Su'];
 let S=null;
 async function post(u,b){await fetch(u,{method:'POST',body:b?JSON.stringify(b):undefined});load(false)}
@@ -66,6 +74,8 @@ async function load(full=true){
     $('servos').innerHTML=S.servo.map((s,i)=>`<div class="row"><b style="width:100px">${NAMES[i]}</b>
       trim<input id="s${i}t" type="number" value="${s.trim}"> min<input id="s${i}a" type="number" value="${s.min}"> max<input id="s${i}b" type="number" value="${s.max}">
       inv<input id="s${i}i" type="checkbox" ${s.inv?'checked':''} style="width:auto"><button class="g" onclick="testServo(${i})">Test</button></div>`).join('');
+    $('emotes').innerHTML=EMOTES.map(m=>`<button class="g" onclick="post('/api/motion?g=${m}&n=3')">${m}</button>`).join('');
+    $('say').innerHTML=SAY.map(m=>`<button class="g" onclick="post('/api/say?key=${m}')">${m}</button>`).join('');
     $('moves').innerHTML=MOVES.map(m=>`<button class="g" onclick="post('/api/motion?g=${m}&n=4')">${m}</button>`).join('');
   }
   $('wx').textContent=S.weather.valid?`${S.weather.text}, ${S.weather.temp} C (min ${S.weather.min} / max ${S.weather.max})`:'no weather yet';
@@ -78,5 +88,6 @@ function saveAlarms(){const a=[];for(let i=0;i<8;i++){const[t1,t2]=$('a'+i+'t').
   a.push({on:$('a'+i+'on').checked,h:+t1,m:+t2,days:d})}post('/api/set',{alarms:a})}
 function saveServos(){const s=[];for(let i=0;i<5;i++)s.push({trim:+$('s'+i+'t').value,min:+$('s'+i+'a').value,max:+$('s'+i+'b').value,inv:$('s'+i+'i').checked});post('/api/set',{servo:s})}
 async function testServo(i){await saveServos();post('/api/servo/test?ch='+i+'&deg=90')}
+async function upload(){const f=$('wav').files[0];if(!f)return;const d=new FormData();d.append('f',f,f.name);await fetch('/api/voice',{method:'POST',body:d});alert('uploaded '+f.name)}
 load();setInterval(()=>load(false),4000);
 </script></body></html>

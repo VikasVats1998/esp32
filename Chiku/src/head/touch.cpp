@@ -66,7 +66,6 @@ static void readCb(lv_indev_t*, lv_indev_data_t* data) {
 }
 
 bool init() {
-  pinMode(PIN_TTP223, INPUT_PULLDOWN);
   pinMode(PIN_TP_INT, INPUT_PULLUP);
   pinMode(PIN_TP_RST, OUTPUT);
   digitalWrite(PIN_TP_RST, LOW); delay(30);
@@ -91,18 +90,5 @@ bool init() {
 
 bool isDown() { return down; }
 void setGestures(bool on) { gesturesOn = on; }
-
-// ---- TTP223 pet sensor ----
-void pollPet() {
-  static bool stable = false, lastRaw = false;
-  static uint32_t changedAt = 0;
-  bool raw = digitalRead(PIN_TTP223) == HIGH;
-  uint32_t now = millis();
-  if (raw != lastRaw) { lastRaw = raw; changedAt = now; }
-  if (raw != stable && now - changedAt >= TTP223_DEBOUNCE_MS) {
-    stable = raw;
-    events::publish(events::EV_PET, stable ? 1 : 0);
-  }
-}
 
 }  // namespace touch
