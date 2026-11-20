@@ -156,7 +156,7 @@ void update(uint32_t dtMs) {
     // Speed limit + ease-out near the target (slows down when closer than 15 deg)
     float step = s.speed * dt;
     float ease = fminf(1.f, 0.25f + fabsf(err) / 15.f);
-    if (s.direct) { step = fabsf(err); ease = 1; }
+    if (s.direct) ease = 1;                // oscillator mode: no easing, speed limit still applies
     float move = fminf(fabsf(err), step * ease);
     s.cur += err > 0 ? move : -move;
     output(c);

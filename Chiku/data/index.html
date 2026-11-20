@@ -1,0 +1,82 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Chiku</title>
+<style>
+body{font-family:system-ui,sans-serif;background:#10141c;color:#e8eef8;max-width:640px;margin:0 auto;padding:12px}
+h1{font-size:22px} h2{font-size:16px;margin:0 0 8px;color:#7fd0ff}
+section{background:#1a2130;border-radius:12px;padding:12px;margin:12px 0}
+label{display:block;font-size:13px;color:#9ab;margin:6px 0 2px}
+input,select,button{font-size:15px;padding:8px;border-radius:8px;border:0;margin:2px}
+input,select{background:#0c1018;color:#fff;width:90px}
+button{background:#2a6fd0;color:#fff;cursor:pointer} button.g{background:#2f3b52}
+.row{display:flex;flex-wrap:wrap;align-items:center;gap:4px}
+.small{font-size:12px;color:#8a9}
+</style></head><body>
+<h1>Chiku <span class="small" id="st"></span></h1>
+
+<section><h2>Look and sound</h2>
+<label>Brightness</label><input type="range" id="bri" min="10" max="255" style="width:100%">
+<label>Volume</label><input type="range" id="vol" min="0" max="100" style="width:100%">
+<div class="row"><button onclick="saveBasic()">Save</button></div></section>
+
+<section><h2>Weather location</h2>
+<div class="row"><input id="lat" placeholder="lat"><input id="lon" placeholder="lon">
+<button onclick="saveBasic()">Save</button><button class="g" onclick="post('/api/weather/refresh')">Refresh</button></div>
+<div class="small" id="wx"></div></section>
+
+<section><h2>Alarms</h2><div id="alarms"></div>
+<div class="row"><button onclick="saveAlarms()">Save alarms</button><button class="g" onclick="post('/api/alarm/test')">Test ring</button></div></section>
+
+<section><h2>Timers</h2>
+<div class="row"><input id="tsec" value="300"> s <button onclick="post('/api/timer?sec='+tsec.value)">Start</button></div>
+<div class="small" id="timers"></div></section>
+
+<section><h2>Move</h2><div class="row" id="moves"></div>
+<div class="row"><button class="g" onclick="post('/api/motion?avoid=1')">Avoid mode on</button>
+<button class="g" onclick="post('/api/motion?avoid=0')">off</button></div></section>
+
+<section><h2>Servo trims</h2><div id="servos"></div>
+<div class="row"><button onclick="saveServos()">Save trims</button></div>
+<div class="small">Test moves the servo to 90 degrees (with trim).</div></section>
+
+<section><h2>Camera</h2>
+<div class="small" id="cam"></div>
+<div class="row"><button onclick="post('/api/cam?cmd=wake')">Wake</button><button class="g" onclick="post('/api/cam?cmd=sleep')">Sleep</button>
+<button class="g" onclick="post('/api/cam?cmd=led_on')">Light on</button><button class="g" onclick="post('/api/cam?cmd=led_off')">off</button></div>
+<a id="camlink" style="color:#7fd0ff" target="_blank">Open stream</a></section>
+
+<section><h2>System</h2>
+<div class="row"><a href="/update" style="color:#7fd0ff">Firmware update (OTA)</a>
+<button class="g" onclick="if(confirm('Forget Wi-Fi?'))post('/api/wifi/reset')">Reset Wi-Fi</button></div></section>
+
+<script>
+const $=id=>document.getElementById(id);
+const NAMES=['Left hip','Right hip','Left ankle','Right ankle','Head pan'];
+const MOVES=['home','walk','back','left','right','bend','shakeleg','moonwalk','dance','jump','wiggle'];
+const DAYS=['Mo','Tu','We','Th','Fr','Sa','Su'];
+let S=null;
+async function post(u,b){await fetch(u,{method:'POST',body:b?JSON.stringify(b):undefined});load(false)}
+async function load(full=true){
+  S=await (await fetch('/api/state')).json();
+  $('st').textContent=S.ip+'  batt '+S.batt+'%  dist '+S.dist+' cm';
+  if(full){
+    $('bri').value=S.brightness;$('vol').value=S.volume;$('lat').value=S.lat;$('lon').value=S.lon;
+    $('alarms').innerHTML=S.alarms.map((a,i)=>`<div class="row"><input type="checkbox" id="a${i}on" ${a.on?'checked':''} style="width:auto">
+      <input type="time" id="a${i}t" value="${String(a.h).padStart(2,'0')}:${String(a.m).padStart(2,'0')}" style="width:110px">
+      ${DAYS.map((d,k)=>`<label style="display:inline;margin:0"><input type="checkbox" id="a${i}d${k}" ${a.days&(1<<k)?'checked':''} style="width:auto">${d}</label>`).join('')}</div>`).join('');
+    $('servos').innerHTML=S.servo.map((s,i)=>`<div class="row"><b style="width:100px">${NAMES[i]}</b>
+      trim<input id="s${i}t" type="number" value="${s.trim}"> min<input id="s${i}a" type="number" value="${s.min}"> max<input id="s${i}b" type="number" value="${s.max}">
+      inv<input id="s${i}i" type="checkbox" ${s.inv?'checked':''} style="width:auto"><button class="g" onclick="testServo(${i})">Test</button></div>`).join('');
+    $('moves').innerHTML=MOVES.map(m=>`<button class="g" onclick="post('/api/motion?g=${m}&n=4')">${m}</button>`).join('');
+  }
+  $('wx').textContent=S.weather.valid?`${S.weather.text}, ${S.weather.temp} C (min ${S.weather.min} / max ${S.weather.max})`:'no weather yet';
+  $('timers').textContent=S.timers.map((t,i)=>t?`#${i+1}: ${t}s`:'').filter(x=>x).join('  ')||'no timer running';
+  $('cam').textContent=`cam ${S.cam.alive?'online':'offline'} (${S.cam.state}) ${S.cam.ip}`;
+  $('camlink').href=S.cam.stream;
+}
+function saveBasic(){post('/api/set',{brightness:+$('bri').value,volume:+$('vol').value,lat:+$('lat').value,lon:+$('lon').value})}
+function saveAlarms(){const a=[];for(let i=0;i<8;i++){const[t1,t2]=$('a'+i+'t').value.split(':');let d=0;for(let k=0;k<7;k++)if($('a'+i+'d'+k).checked)d|=1<<k;
+  a.push({on:$('a'+i+'on').checked,h:+t1,m:+t2,days:d})}post('/api/set',{alarms:a})}
+function saveServos(){const s=[];for(let i=0;i<5;i++)s.push({trim:+$('s'+i+'t').value,min:+$('s'+i+'a').value,max:+$('s'+i+'b').value,inv:$('s'+i+'i').checked});post('/api/set',{servo:s})}
+async function testServo(i){await saveServos();post('/api/servo/test?ch='+i+'&deg=90')}
+load();setInterval(()=>load(false),4000);
+</script></body></html>
