@@ -1,6 +1,6 @@
 # Chiku bring-up and test checklist
 
-Use the phone app (`RobotApp`): **Test > Checklist** has a test for every screen, sensor, pad, motor and sound with pass/fail and a shareable report; **Console** shows the complete robot log and lets you send commands. Put the robot in **Manual** mode first. (Manual testing also works with the app's **Test** views or or the web page `http://chiku.local`.) API: `RobotApp/docs/API.md`.
+Use the phone app (`RobotApp`): **Test > Checklist** has a test for every screen, sensor, pad, motor and sound with pass/fail and a shareable report; **Console** shows the complete robot log and lets you send commands. Put the robot in **Manual** mode first. (Manual testing also works with the app's **Test** views or the web page `http://chiku.local`.) API: `RobotApp/docs/API.md`.
 
 ## 1. Before power
 - [ ] 5 V buck output measured (5.0 V) **before** connecting the PCA9685 V+; common GND everywhere.
