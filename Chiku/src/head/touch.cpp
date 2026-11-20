@@ -1,0 +1,108 @@
+// touch.cpp - see touch.h
+#include "touch.h"
+#include "config.h"
+#include "bus.h"
+#include "events.h"
+#include <lvgl.h>
+#include <TouchDrvCSTXXX.hpp>
+
+namespace touch {
+
+static TouchDrvCST92xx cst;
+static volatile bool irqFlag = false;
+static volatile bool down = false;
+static bool gesturesOn = true;
+static bool ready = false;
+
+// Gesture tracking
+static int16_t startX, startY, lastX, lastY;
+static uint32_t startMs;
+static bool longSent;
+
+static void IRAM_ATTR onIrq() { irqFlag = true; }
+
+static void gestureStep(bool pressed, int16_t x, int16_t y) {
+  uint32_t now = millis();
+  if (pressed && !down) {                       // finger just landed
+    startX = lastX = x; startY = lastY = y;
+    startMs = now; longSent = false;
+  } else if (pressed) {                         // finger moving
+    lastX = x; lastY = y;
+    if (!longSent && now - startMs > LONG_PRESS_MS &&
+        abs(x - startX) < 25 && abs(y - startY) < 25) {
+      longSent = true;
+      if (gesturesOn) events::publish(events::EV_TOUCH_LONG, x, y);
+    }
+  } else if (down) {                            // finger just left
+    int dx = lastX - startX, dy = lastY - startY;
+    if (gesturesOn && !longSent) {
+      if (abs(dx) > 70 && abs(dx) > abs(dy) * 1.5f) {
+        events::publish(events::EV_SWIPE, dx > 0 ? 1 : -1);
+      } else if (abs(dx) < 30 && abs(dy) < 30 && now - startMs < 600) {
+        events::publish(events::EV_TOUCH_TAP, lastX, lastY);
+      }
+    } else if (!gesturesOn && abs(dx) < 30 && abs(dy) < 30) {
+      events::publish(events::EV_TOUCH_TAP, lastX, lastY);   // taps still reported
+    }
+  }
+  down = pressed;
+}
+
+static void readCb(lv_indev_t*, lv_indev_data_t* data) {
+  static int16_t px = 0, py = 0;
+  bool pressed = false;
+  if (ready && (irqFlag || down)) {
+    irqFlag = false;
+    int16_t x[2], y[2];
+    bus::lock();
+    uint8_t n = cst.getPoint(x, y, 1);
+    bus::unlock();
+    if (n > 0) { px = x[0]; py = y[0]; pressed = true; }
+  }
+  gestureStep(pressed, px, py);
+  data->point.x = px;
+  data->point.y = py;
+  data->state = pressed ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
+}
+
+bool init() {
+  pinMode(PIN_TTP223, INPUT_PULLDOWN);
+  pinMode(PIN_TP_INT, INPUT_PULLUP);
+  pinMode(PIN_TP_RST, OUTPUT);
+  digitalWrite(PIN_TP_RST, LOW); delay(30);
+  digitalWrite(PIN_TP_RST, HIGH); delay(60);
+
+  cst.setPins(PIN_TP_RST, PIN_TP_INT);
+  bus::lock();
+  ready = cst.begin(Wire, I2C_ADDR_CST9217, PIN_I2C0_SDA, PIN_I2C0_SCL);
+  if (ready) {
+    cst.setMaxCoordinates(LCD_W, LCD_H);
+    cst.setMirrorXY(true, true);
+  }
+  bus::unlock();
+  if (!ready) return false;
+  attachInterrupt(digitalPinToInterrupt(PIN_TP_INT), onIrq, FALLING);
+
+  lv_indev_t* in = lv_indev_create();
+  lv_indev_set_type(in, LV_INDEV_TYPE_POINTER);
+  lv_indev_set_read_cb(in, readCb);
+  return true;
+}
+
+bool isDown() { return down; }
+void setGestures(bool on) { gesturesOn = on; }
+
+// ---- TTP223 pet sensor ----
+void pollPet() {
+  static bool stable = false, lastRaw = false;
+  static uint32_t changedAt = 0;
+  bool raw = digitalRead(PIN_TTP223) == HIGH;
+  uint32_t now = millis();
+  if (raw != lastRaw) { lastRaw = raw; changedAt = now; }
+  if (raw != stable && now - changedAt >= TTP223_DEBOUNCE_MS) {
+    stable = raw;
+    events::publish(events::EV_PET, stable ? 1 : 0);
+  }
+}
+
+}  // namespace touch
