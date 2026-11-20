@@ -1,0 +1,57 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Jinu</title>
+<style>
+body{font-family:system-ui,sans-serif;background:#10141c;color:#e8eef8;max-width:640px;margin:0 auto;padding:12px}
+h1{font-size:22px} h2{font-size:16px;margin:0 0 8px;color:#ffb060}
+section{background:#1a2130;border-radius:12px;padding:12px;margin:12px 0}
+label{display:block;font-size:13px;color:#9ab;margin:6px 0 2px}
+input,button{font-size:15px;padding:8px;border-radius:8px;border:0;margin:2px}
+input{background:#0c1018;color:#fff;width:90px}
+button{background:#d07a2a;color:#fff;cursor:pointer} button.g{background:#2f3b52}
+.row{display:flex;flex-wrap:wrap;align-items:center;gap:4px}.small{font-size:12px;color:#8a9}
+</style></head><body>
+<h1>Jinu <span class="small" id="st"></span></h1>
+<section><h2>Look and sound</h2>
+<label>Brightness</label><input type="range" id="bri" min="10" max="255" style="width:100%">
+<label>Volume</label><input type="range" id="vol" min="0" max="100" style="width:100%">
+<div class="row"><button onclick="saveBasic()">Save</button></div></section>
+<section><h2>Faces</h2><div class="row" id="moods"></div></section>
+<section><h2>Feelings (face + body + voice)</h2><div class="row" id="emotes"></div></section>
+<section><h2>Move</h2><div class="row" id="moves"></div>
+<div class="row"><button class="g" onclick="post('/api/motion?avoid=1')">Explore on</button><button class="g" onclick="post('/api/motion?avoid=0')">off</button></div></section>
+<section><h2>Voice</h2><div class="row" id="say"></div>
+<div class="small">16 kHz 16-bit mono WAV, same name as the button. Space is small (about 900 KB in total).</div>
+<div class="row"><input type="file" id="wav" accept=".wav" style="width:auto"><button type="button" onclick="upload()">Upload</button></div></section>
+<section><h2>Servo trims</h2><div id="servos"></div>
+<div class="row"><button onclick="saveServos()">Save trims</button></div></section>
+<section><h2>System</h2><div class="row"><a href="/update" style="color:#ffb060">Firmware update (OTA)</a>
+<button class="g" onclick="if(confirm('Forget Wi-Fi?'))post('/api/wifi/reset')">Reset Wi-Fi</button></div></section>
+<script>
+const $=id=>document.getElementById(id);
+const NAMES=['Left hip','Right hip','Left ankle','Right ankle'];
+const MOODS=['normal','happy','sad','sleepy','angry','surprised','dizzy','love','thinking','listening','jealous','sulk','shy','excited','scared','cry'];
+const MOVES=['home','walk','back','left','right','bend','shakeleg','moonwalk','dance','jump','wiggle'];
+const EMOTES=['happy','excited','angry','scared','sulk','jealous','shy','love','sad','surprised','tiltl','tiltr'];
+const SAY=['hello','happy','excited','shy','love','surprised','angry','sulk','scared','sad','jealous'];
+let S=null;
+async function post(u,b){await fetch(u,{method:'POST',body:b?JSON.stringify(b):undefined});load(false)}
+async function load(full=true){
+  S=await (await fetch('/api/state')).json();
+  $('st').textContent=S.ip+'  mood '+S.mood+'  dist '+S.dist+' cm';
+  if(full){
+    $('bri').value=S.brightness;$('vol').value=S.volume;
+    $('moods').innerHTML=MOODS.map((m,i)=>`<button class="g" onclick="post('/api/mood?m=${i}')">${m}</button>`).join('');
+    $('emotes').innerHTML=EMOTES.map(m=>`<button class="g" onclick="post('/api/motion?g=${m}&n=3')">${m}</button>`).join('');
+    $('moves').innerHTML=MOVES.map(m=>`<button class="g" onclick="post('/api/motion?g=${m}&n=4')">${m}</button>`).join('');
+    $('say').innerHTML=SAY.map(m=>`<button class="g" onclick="post('/api/say?key=${m}')">${m}</button>`).join('');
+    $('servos').innerHTML=S.servo.map((s,i)=>`<div class="row"><b style="width:100px">${NAMES[i]}</b>
+      trim<input id="s${i}t" type="number" value="${s.trim}"> min<input id="s${i}a" type="number" value="${s.min}"> max<input id="s${i}b" type="number" value="${s.max}">
+      inv<input id="s${i}i" type="checkbox" ${s.inv?'checked':''} style="width:auto"><button class="g" onclick="testServo(${i})">Test</button></div>`).join('');
+  }
+}
+function saveBasic(){post('/api/set',{brightness:+$('bri').value,volume:+$('vol').value})}
+function saveServos(){const s=[];for(let i=0;i<4;i++)s.push({trim:+$('s'+i+'t').value,min:+$('s'+i+'a').value,max:+$('s'+i+'b').value,inv:$('s'+i+'i').checked});post('/api/set',{servo:s})}
+async function testServo(i){await saveServos();post('/api/servo/test?ch='+i+'&deg=90')}
+async function upload(){const f=$('wav').files[0];if(!f)return;const d=new FormData();d.append('f',f,f.name);await fetch('/api/voice',{method:'POST',body:d});alert('uploaded '+f.name)}
+load();setInterval(()=>load(false),4000);
+</script></body></html>
