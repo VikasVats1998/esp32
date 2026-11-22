@@ -39,7 +39,7 @@ static bool write8(uint8_t reg, uint8_t v) {
 
 static void writePwm(uint8_t c, uint16_t on, uint16_t off) {
   Wire1.beginTransmission(I2C_ADDR_PCA9685);
-  Wire1.write(LED0_ON_L + 4 * c);
+  Wire1.write(LED0_ON_L + 4 * SERVO_HW_CH[c]);          // logical servo -> wired PCA9685 channel
   Wire1.write(on & 255); Wire1.write(on >> 8);
   Wire1.write(off & 255); Wire1.write(off >> 8);
   Wire1.endTransmission();
@@ -166,7 +166,7 @@ void update(uint32_t dtMs) {
   }
   if (any) { lastMoveMs = now; everMoved = true; }
   // Idle for 2 s -> all outputs off (no holding current), chip to sleep
-  if (!asleep && now - lastMoveMs > SERVO_IDLE_OFF_MS && !moving()) {
+  if (!SERVO_HOLD_AT_REST && !asleep && now - lastMoveMs > SERVO_IDLE_OFF_MS && !moving()) {
     for (uint8_t c = 0; c < SERVO_COUNT; c++) channelOff(c);
     chipSleep();
   }

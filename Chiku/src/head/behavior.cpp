@@ -13,6 +13,8 @@
 #include "storage.h"
 #include "camlink.h"
 #include "pads.h"
+#include "srvlink.h"
+#include "wake.h"
 
 namespace behavior {
 
@@ -117,7 +119,7 @@ static void onPad(int pad, int gesture) {
       break;
     case PAD_BODY:
       switch (gesture) {
-        case TAP1: emote(face::M_HAPPY, 2200, motion::G_HAPPY, 3, audio::BAB_HAPPY, "happy"); break;
+        case TAP1: emote(face::M_HAPPY, 2200, motion::G_HAPPY, 6, audio::BAB_HAPPY, "happy"); break;
         case TAP2: emote(face::M_JEALOUS, 3800, motion::G_JEALOUS, 5, audio::BAB_QUESTION, "jealous"); break;
         case TAP3: emote(face::M_CRY, 3500, motion::G_SAD, 2, audio::BAB_SAD, "sad"); break;
         case LONG_START: face::setMood(face::M_LOVE, 0); events::publish(events::EV_MOTION_CMD, motion::G_LOVE, 25);
@@ -169,6 +171,55 @@ void setMode(Mode m) {
   face::setMood(m == MODE_EXPLORE ? face::M_EXCITED : face::M_NORMAL, m == MODE_EXPLORE ? 1500 : 0);
 }
 
+// ---- EMO-style touch / motion personality ----
+static uint32_t tapTimes[10];
+static uint8_t tapN = 0;
+static uint32_t angryAfterShakeAt = 0;                 // dizzy first, then a short grumpy phase
+static uint32_t lastShakeAt = 0;
+
+// Counts taps in a sliding 3 s window. Returns the number of taps inside it.
+static int registerTap(uint32_t now) {
+  if (tapN == 10) { memmove(tapTimes, tapTimes + 1, 9 * sizeof(uint32_t)); tapN = 9; }
+  tapTimes[tapN++] = now;
+  while (tapN && now - tapTimes[0] > 3000) { memmove(tapTimes, tapTimes + 1, (tapN - 1) * sizeof(uint32_t)); tapN--; }
+  return tapN;
+}
+
+// ---- spoken commands (wake.cpp) ----
+static void voiceLevel(srvlink::Type t, int delta) {
+  srvlink::Device d;
+  int i = srvlink::find(t);
+  if (!srvlink::get(i, d)) { face::setMood(face::M_SAD, 1500); audio::beep(400, 120); return; }
+  srvlink::setLevel(i, d.level + delta);
+  face::setMood(face::M_HAPPY, 1200);
+  audio::beep(1500, 50);
+}
+static void onVoice(int cmd) {
+  switch (cmd) {
+    case wake::C_LIGHT_ON: case wake::C_LIGHT_OFF: case wake::C_FAN_ON: case wake::C_FAN_OFF: {
+      bool on = (cmd == wake::C_LIGHT_ON || cmd == wake::C_FAN_ON);
+      int i = srvlink::find((cmd == wake::C_LIGHT_ON || cmd == wake::C_LIGHT_OFF) ? srvlink::T_LIGHT : srvlink::T_FAN);
+      if (i < 0) { face::setMood(face::M_SAD, 1500); audio::beep(400, 120); break; }   // no such device on the server
+      srvlink::setOn(i, on);
+      face::setMood(face::M_HAPPY, 1500);
+      audio::play(audio::MEL_PET);
+      break;
+    }
+    case wake::C_BRIGHTER: voiceLevel(srvlink::T_LIGHT, +20); break;
+    case wake::C_DIMMER: voiceLevel(srvlink::T_LIGHT, -20); break;
+    case wake::C_SLEEP: face::setMood(face::M_SLEEPY, 4000); audio::play(audio::MEL_SAD); break;
+    case wake::C_HAPPY: face::setMood(face::M_EXCITED, 3000); audio::play(audio::MEL_HAPPY); break;
+    case wake::C_DANCE: {
+      motion::Gait g;
+      face::setMood(face::M_EXCITED, 4000);
+      audio::play(audio::MEL_HAPPY);
+      if (motion::gaitFromName("dance", g)) events::publish(events::EV_MOTION_CMD, g, 4);
+      break;
+    }
+    default: break;
+  }
+}
+
 void init() { lastTouch = millis(); nextIdle = millis() + 30000; }
 
 void onEvent(const events::Event& e) {
@@ -184,18 +235,51 @@ void onEvent(const events::Event& e) {
     case EV_TOUCH_TAP:
       if (ringing) { alarm_timer::stop(); break; }
       if (ui::current() == ui::S_FACE) {
-        if (random(0, 2)) { face::setMood(face::M_HAPPY, 1800); audio::play(audio::MEL_HAPPY); }
-        else { face::setMood(face::M_SURPRISED, 1500); audio::beep(1200, 60); }
+        uint32_t now = millis();
+        bool dbl = tapN > 0 && now - tapTimes[tapN - 1] < 380;          // second tap very soon after the first
+        int taps = registerTap(now);
         float lx = (e.a - LCD_W / 2) / (LCD_W / 2.f), ly = (e.b - LCD_H / 2) / (LCD_H / 2.f);
-        face::lookAt(lx, ly);                       // look at the finger
+        if (taps >= 9) {                                                  // tapped far too much: furious
+          face::rage(2500);
+          audio::babble(audio::BAB_ANGRY, 4);
+          tapN = 0;
+        } else if (taps >= 5) {                                           // annoyed
+          face::setMood(face::M_ANGRY, 2500);
+          audio::babble(audio::BAB_ANGRY, 2);
+        } else if (dbl) {                                                 // double tap: wink
+          face::wink(1);
+          face::setMood(face::M_HAPPY, 1400);
+          audio::beep(1800, 40);
+        } else if (random(0, 2)) { face::setMood(face::M_HAPPY, 1800); audio::play(audio::MEL_HAPPY); }
+        else { face::setMood(face::M_SURPRISED, 1500); audio::beep(1200, 60); }
+        face::lookAt(lx, ly);                                             // look at the finger
         events::publish(EV_LOOK, (int)(lx * 100), (int)(ly * 100));
       }
       break;
-    case EV_SHAKE:
-      if (ringing) { alarm_timer::stop(); break; }
-      face::setMood(face::M_DIZZY, 3500);
-      audio::play(audio::MEL_DIZZY);
+    case EV_TOUCH_LONG:                                                   // long press on the face: love
+      if (ui::current() == ui::S_FACE && !ringing) {
+        face::setMood(face::M_LOVE, 3500);
+        audio::say("happy", audio::BAB_LOVE);
+      }
       break;
+    case EV_TILT:                                                         // eyes look "downhill"
+      if (ui::current() == ui::S_FACE && !power::state()) face::lookAt(constrain(e.a / 35.f, -1.f, 1.f), constrain(e.b / 50.f, -1.f, 1.f));
+      break;
+    case EV_SHAKE: {
+      if (ringing) { alarm_timer::stop(); break; }
+      uint32_t now = millis();
+      if (angryAfterShakeAt && now - lastShakeAt < 6000) {                // shaken again while grumpy: rage
+        face::rage(3000);
+        audio::babble(audio::BAB_ANGRY, 4);
+        angryAfterShakeAt = 0;
+      } else {
+        face::setMood(face::M_DIZZY, 3500);
+        audio::play(audio::MEL_DIZZY);
+        angryAfterShakeAt = now + 3500;                                    // then a short grumpy phase
+      }
+      lastShakeAt = now;
+      break;
+    }
     case EV_PICKUP: face::setMood(face::M_SURPRISED, 1500); audio::beep(1400, 50); break;
     case EV_PUTDOWN: face::setMood(face::M_HAPPY, 1200); break;
     case EV_TAP_IMU: face::setMood(face::M_SURPRISED, 800); break;
@@ -204,6 +288,25 @@ void onEvent(const events::Event& e) {
       face::setMood(face::M_SAD, 5000);
       audio::play(audio::MEL_SAD);
       break;
+    case EV_CLAP:                                   // wake / greet (power::activity already woke us)
+      if (ringing) { alarm_timer::stop(); break; }
+      ui::show(ui::S_FACE);
+      if (e.a >= 2) { face::setMood(face::M_EXCITED, 2500); audio::play(audio::MEL_HAPPY); }
+      else { face::setMood(face::M_SURPRISED, 1400); audio::beep(1500, 50); }
+      face::lookAt(0, -0.2f);
+      break;
+    case EV_WAKEWORD:
+      if (ringing) { alarm_timer::stop(); break; }
+      ui::show(ui::S_FACE);
+      face::setMood(face::M_LISTENING, 6000);       // listening for a command
+      audio::beep(1800, 40);
+      break;
+    case EV_FLIP:
+      if (e.a) { face::setMood(face::M_SCARED, 4000); audio::babble(audio::BAB_SURPRISE, 2); }
+      else { face::setMood(face::M_HAPPY, 1500); audio::beep(1200, 50); }
+      break;
+    case EV_VOICE: onVoice(e.a); break;
+    case EV_VOICE_END: break;                       // the listening face fades back by itself
     case EV_PAD: onPad(e.a, e.b); break;
     case EV_OBSTACLE:
       face::setMood(face::M_SURPRISED, 1000);
@@ -249,8 +352,34 @@ void onEvent(const events::Event& e) {
   }
 }
 
+// Battery and charger: a little life of its own (plugged in = happy, low = tired and sad).
+static void powerLife(uint32_t now) {
+  static uint32_t next = 0, lowAt = 0;
+  static int lastChg = -1;
+  if (now < next) return;
+  next = now + 2000;
+  bool chg = power::charging();
+  int pct = power::batteryPercent();
+  if (lastChg >= 0 && (int)chg != lastChg) {
+    if (chg) { face::setMood(face::M_EXCITED, 2500); audio::play(audio::MEL_HAPPY); }       // plugged in
+    else { face::setMood(face::M_SURPRISED, 1500); audio::beep(900, 80); }                    // unplugged
+  }
+  lastChg = chg;
+  if (pct >= 0 && pct <= 15 && !chg && (lowAt == 0 || now - lowAt > 600000UL)) {            // low: once per 10 min
+    lowAt = now;
+    face::setMood(pct <= 5 ? face::M_SLEEPY : face::M_SAD, 5000);
+    audio::play(audio::MEL_SAD);
+  }
+}
+
 void update(uint32_t dtMs) {
   if (curMode == MODE_MANUAL) return;
+  powerLife(millis());
+  if (angryAfterShakeAt && millis() > angryAfterShakeAt) {                // dizzy is over: grumpy for a moment
+    angryAfterShakeAt = 0;
+    face::setMood(face::M_ANGRY, 1600);
+    audio::babble(audio::BAB_ANGRY, 2);
+  }
   // feelings fade slowly
   affection = fmaxf(0, affection - dtMs * 0.0003f);
   annoyance = fmaxf(0, annoyance - dtMs * 0.006f);

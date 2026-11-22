@@ -1,4 +1,4 @@
-// servo.h - PCA9685 servo driver on the external I2C bus (Wire1, GPIO17/18).
+// servo.h - PCA9685 servo driver on the external I2C bus (Wire1, GPIO16/17).
 // Each servo glides to its target with a speed limit and easing. Starts are
 // staggered (never all servos at once) to avoid current spikes. After 2 s with
 // no movement all outputs are switched fully off and the chip is put to sleep.

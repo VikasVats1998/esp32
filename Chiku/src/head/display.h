@@ -10,5 +10,8 @@ namespace display {
 bool init();                         // starts panel, LVGL, tick
 void setBrightness(uint8_t value);   // 0..255 (AMOLED panel command)
 uint8_t brightness();
+void setRotation(int deg);   // 0/90/180/270, software rotation of the whole UI
+int rotation();
+uint32_t flushCount();               // frames sent to the panel (debug)
 void panelOff();                     // sleep the panel (not used by default)
 }  // namespace display

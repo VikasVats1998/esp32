@@ -8,6 +8,8 @@
 #include "storage.h"
 #include "rtc_time.h"
 #include "weather.h"
+#include "srvlink.h"
+#include "mic.h"
 #include "servo.h"
 #include "motion.h"
 #include "alarm_timer.h"
@@ -175,6 +177,19 @@ static void handleState() {
   JsonObject im = d["imu"].to<JsonObject>();
   float ax, ay, az; imu::getAccel(ax, ay, az);
   im["ok"] = imu::online(); im["x"] = ax; im["y"] = ay; im["z"] = az; im["tilt"] = imu::tiltDeg();
+  float gx, gy, gz; imu::getGyro(gx, gy, gz);
+  im["gx"] = gx; im["gy"] = gy; im["gz"] = gz;
+  JsonObject sv0 = d["hub"].to<JsonObject>();
+  sv0["url"] = s.serverUrl; sv0["linked"] = srvlink::linked(); sv0["devices"] = srvlink::count();
+  sv0["ai"] = s.aiVoice;
+  JsonObject sn = d["sensors"].to<JsonObject>();
+  sn["roll"] = imu::roll(); sn["pitch"] = imu::pitch(); sn["flipped"] = imu::flipped();
+  sn["gyroCal"] = imu::calibrated();
+  sn["gbx"] = imu::gyroBias(0); sn["gby"] = imu::gyroBias(1); sn["gbz"] = imu::gyroBias(2);
+  sn["micOk"] = mic::online(); sn["sound"] = mic::level(); sn["soundPeak"] = mic::peak(); sn["noise"] = mic::noiseFloor();
+  sn["clapWake"] = s.clapWake; sn["clapSens"] = s.clapSens; sn["wakeWord"] = s.wakeWord;
+  sn["batV"] = power::batteryVolts(); sn["usbV"] = power::vbusVolts(); sn["coreC"] = power::coreTempC();
+  sn["pmu"] = power::pmuOnline();
   d["ssid"] = s.ssid;
   d["ip"] = ipStr;
   d["lat"] = s.lat;
@@ -222,6 +237,17 @@ static void handleSet() {
   if (d["lon"].is<float>()) s.lon = d["lon"];
   if (d["brightness"].is<int>()) s.brightness = constrain((int)d["brightness"], 5, 255);
   if (d["volume"].is<int>()) s.volume = constrain((int)d["volume"], 0, 100);
+  if (d["serverUrl"].is<const char*>()) {                 // "" turns the hub link off
+    strlcpy(s.serverUrl, d["serverUrl"], sizeof(s.serverUrl));
+    size_t L = strlen(s.serverUrl);
+    while (L && s.serverUrl[L - 1] == '/') s.serverUrl[--L] = 0;
+    srvlink::syncNow();
+  }
+  if (d["serverToken"].is<const char*>()) strlcpy(s.serverToken, d["serverToken"], sizeof(s.serverToken));
+  if (d["aiVoice"].is<bool>()) s.aiVoice = d["aiVoice"];
+  if (d["clapWake"].is<bool>()) s.clapWake = d["clapWake"];
+  if (d["clapSens"].is<int>()) s.clapSens = constrain((int)d["clapSens"], 0, 100);
+  if (d["wakeWord"].is<bool>()) s.wakeWord = d["wakeWord"];
   if (d["servo"].is<JsonArray>()) {
     int i = 0;
     for (JsonObject o : d["servo"].as<JsonArray>()) {
@@ -446,6 +472,7 @@ static void setupTestRoutes() {
   route("/api/look", HTTP_POST, []() { face::lookAt(server.arg("x").toFloat(), server.arg("y").toFloat()); ok(); });
   route("/api/screen", HTTP_POST, []() { events::publish(events::EV_SCREEN, server.arg("id").toInt()); ok(); });
   route("/api/display", HTTP_POST, []() { ui::setTestPattern(server.arg("p").toInt()); ok(); });
+  route("/api/imu/calibrate", HTTP_POST, []() { imu::calibrate(); ok(); });
   route("/api/reboot", HTTP_POST, []() { ok(); delay(200); ESP.restart(); });
 }
 
@@ -538,6 +565,7 @@ static void onConnected() {
 }
 
 static void netTask(void*) {
+  WiFi.mode(WIFI_STA);   // brings up the TCP/IP stack; server.begin() crashes (null mutex) without it
   setupRoutes();
   for (;;) {
     if (restartReq) {

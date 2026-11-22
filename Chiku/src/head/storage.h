@@ -29,6 +29,12 @@ struct Settings {
   AlarmCfg alarms[MAX_ALARMS];
   ServoCfg servo[SERVO_COUNT];
   bool servoCalibrated;
+  char serverUrl[64];      // hub server, e.g. http://192.168.1.20:8080 (empty = off)
+  char serverToken[24];
+  bool clapWake;           // wake / react on claps
+  uint8_t clapSens;        // 0..100, higher = reacts to quieter claps
+  bool wakeWord;           // voice wake word (when the engine is available)
+  bool aiVoice;            // AI voice assistant (hook only, not implemented yet)
 };
 
 namespace storage {

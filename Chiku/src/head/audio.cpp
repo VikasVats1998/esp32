@@ -11,7 +11,18 @@
 namespace audio {
 
 static const uint32_t RATE = 16000;
-static I2SClass i2s;
+// The speech engine (ESP_SR) reads the microphones through i2s.readBytes(). We override it to let
+// the mic module see the same samples (level meter + claps) while the engine is running.
+static void (*tapFn)(const int16_t*, size_t) = nullptr;
+class TapI2S : public I2SClass {
+ public:
+  size_t readBytes(char* b, size_t n) {
+    size_t r = I2SClass::readBytes(b, n);
+    if (tapFn && r) tapFn((const int16_t*)b, r / 4);
+    return r;
+  }
+};
+static TapI2S i2s;
 static bool ok = false;
 static QueueHandle_t noteQ = nullptr;
 static volatile bool stopFlag = false;
@@ -243,6 +254,43 @@ static void audioTask(void*) {
     }
   }
 }
+
+// ---- Microphones: separate ES7210 ADC on the same I2S bus (register recipe from the Lumo project) ----
+static bool micOk = false;
+static bool es7210Init() {
+  if (!bus::probe(I2C_ADDR_ES7210)) return false;
+  // Register order of the DeskBuddy project (proven on this board): slave mode, MCLK 4.096 MHz, 16 kHz,
+  // mic 1 + 2 in standard I2S, 16 bit, 30 dB gain, high-pass filters on.
+  const uint8_t gain = 0x10 | 0x0A;
+  static const uint8_t seq[][2] = {
+      {0x00, 0xFF}, {0x00, 0x41}, {0x01, 0x3F}, {0x09, 0x30}, {0x0A, 0x30},
+      {0x23, 0x2A}, {0x22, 0x0A}, {0x20, 0x0A}, {0x21, 0x2A},
+      {0x08, 0x10},
+      {0x40, 0x43}, {0x41, 0x70}, {0x42, 0x70},
+      {0x07, 0x20}, {0x02, 0xC1}, {0x04, 0x01}, {0x05, 0x00},
+      {0x11, 0x60}, {0x12, 0x00},
+      {0x4B, 0xFF}, {0x4C, 0xFF},
+      {0x01, 0x34}, {0x4B, 0x00}, {0x43, gain}, {0x44, gain},
+      {0x06, 0x00}, {0x47, 0x08}, {0x48, 0x08}, {0x49, 0x08}, {0x4A, 0x08},
+      {0x40, 0x43}, {0x00, 0x71}, {0x00, 0x41},
+  };
+  for (auto& r : seq)
+    if (!bus::writeReg(I2C_ADDR_ES7210, r[0], r[1])) return false;
+  return true;
+}
+bool micBegin() {
+  if (!ok) return false;
+  // the ES8311 must not drive the shared data-out line: the ES7210 does
+  wr(0x14, 0x00);
+  wr(0x0A, 0x4C);
+  if (!i2s.configureRX(RATE, I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_STEREO)) return false;
+  micOk = es7210Init();
+  return micOk;
+}
+bool micOnline() { return micOk; }
+void micTap(void (*fn)(const int16_t*, size_t)) { tapFn = fn; }
+I2SClass& i2sRef() { return i2s; }
+size_t micRead(int16_t* buf, size_t bytes) { return micOk ? i2s.I2SClass::readBytes((char*)buf, bytes) : 0; }
 
 bool init() {
   pinMode(PIN_PA_CTRL, OUTPUT);

@@ -40,7 +40,8 @@
 #define SERVO_FREQ_HZ        50
 #define SERVO_US_MIN        500    // pulse at 0 deg
 #define SERVO_US_MAX       2400    // pulse at 180 deg
-#define SERVO_IDLE_OFF_MS   2000   // release servos after this idle time
+#define SERVO_IDLE_OFF_MS   2000   // release servos after this idle time (only if not holding)
+#define SERVO_HOLD_AT_REST     1   // 1: keep every servo powered at its pose (90 deg at rest); 0: go limp when idle
 #define SERVO_MAX_SPEED_DPS  300.f // deg/s limit
 #define SERVO_STAGGER_MS      40   // start delay between servos (avoid current spikes)
 #define SERVO_SOFTSTART_DPS   40.f // speed of the first move after boot

@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Remote Test</title>
+<style>
+:root{--bg:#0f1218;--card:#181d27;--line:#2a3140;--fg:#e6e9ef;--mut:#8b93a5;--ok:#3ddc84;--warn:#ffb84d;--bad:#ff5d5d;--acc:#4da3ff}
+@media(prefers-color-scheme:light){:root{--bg:#f3f5f9;--card:#fff;--line:#d9deea;--fg:#1a2030;--mut:#5b6478}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px system-ui,sans-serif;padding:16px}
+h1{font-size:20px;margin:0 0 4px}.sub{color:var(--mut);margin-bottom:14px}
+.top{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+button{background:var(--acc);color:#fff;border:0;border-radius:8px;padding:9px 14px;font-size:14px;cursor:pointer}
+button.sec{background:var(--card);color:var(--fg);border:1px solid var(--line)}
+.pill{padding:4px 10px;border-radius:99px;border:1px solid var(--line);color:var(--mut);font-size:13px}
+.pill.on{color:var(--ok);border-color:var(--ok)}
+.grid{display:grid;grid-template-columns:minmax(260px,380px) 1fr;gap:14px}
+@media(max-width:760px){.grid{grid-template-columns:1fr}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}
+canvas{width:100%;aspect-ratio:1;display:block;border-radius:8px}
+.row{margin:10px 0}.lab{display:flex;justify-content:space-between;color:var(--mut);font-size:13px;margin-bottom:4px}
+.lab b{color:var(--fg);font-variant-numeric:tabular-nums}
+.bar{height:14px;background:var(--bg);border:1px solid var(--line);border-radius:7px;position:relative;overflow:hidden}
+.bar i{position:absolute;top:0;bottom:0;background:var(--acc)}.bar u{position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--mut)}
+.btns{display:flex;gap:10px;margin:12px 0}
+.led{flex:1;padding:12px;border-radius:10px;border:1px solid var(--line);text-align:center}
+.led.down{background:var(--bad);color:#fff;border-color:var(--bad);font-weight:600}
+ul{list-style:none;padding:0;margin:0}li{padding:7px 0;border-bottom:1px solid var(--line);display:flex;gap:8px}
+li:last-child{border:0}.s{width:1.2em;text-align:center}.ok .s{color:var(--ok)}.warn .s{color:var(--warn)}.bad .s{color:var(--bad)}
+li small{color:var(--mut);margin-left:auto;font-variant-numeric:tabular-nums}
+.all{margin-top:12px;padding:10px;border-radius:8px;background:var(--ok);color:#06210f;font-weight:700;text-align:center;display:none}
+</style></head><body>
+<h1>Joystick remote test</h1>
+<div class="sub">Run <code>python3 remote_server.py</code> and open <code>http://localhost:8765</code> (any browser). Or open this file in Chrome/Edge and use Connect (Web Serial). Close the Arduino Serial Monitor first.</div>
+<div class="top">
+  <button id="conn">Connect board</button>
+  <button class="sec" id="cal">Recalibrate / reset</button>
+  <span class="pill" id="status">disconnected</span><span class="pill" id="hz">0 Hz</span>
+</div>
+<div class="grid">
+  <div class="card"><canvas id="pad" width="400" height="400"></canvas>
+    <div class="btns"><div class="led" id="ledJ">Joystick click<br><small>GPIO3 · <span id="nJ">0</span>x</small></div>
+    <div class="led" id="ledB">Button<br><small>GPIO10 · <span id="nB">0</span>x</small></div></div></div>
+  <div class="card">
+    <div class="row"><div class="lab"><span>X axis · GPIO0</span><b id="xv">–</b></div><div class="bar"><u></u><i id="xb"></i></div></div>
+    <div class="row"><div class="lab"><span>Y axis · GPIO1</span><b id="yv">–</b></div><div class="bar"><u></u><i id="yb"></i></div></div>
+    <h3 style="margin:18px 0 4px;font-size:15px">Checklist</h3>
+    <ul id="list"></ul>
+    <div class="all" id="all">ALL GOOD – remote hardware works!</div>
+  </div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+let port,reader,cx=null,cy=null,calib=[],mn=[4095,4095],mx=[0,0],raw=[2048,2048],sw=0,bt=0,swn=0,btn=0,swp=0,btp=0,swok=false,btok=false,cnt=0,trail=[],lastRx=0;
+function reset(){cx=cy=null;calib=[];mn=[4095,4095];mx=[0,0];}
+$('cal').onclick=reset;
+if(location.protocol.startsWith('http')){
+  $('conn').style.display='none';$('status').textContent='via server';$('status').classList.add('on');
+  const es=new EventSource('/stream');es.onmessage=e=>parse(e.data.trim());
+}
+$('conn').onclick=async()=>{
+  if(!('serial' in navigator)){alert('Web Serial not supported. Use Chrome or Edge.');return;}
+  try{port=await navigator.serial.requestPort({filters:[{usbVendorId:0x303a}]});await port.open({baudRate:115200});}catch(e){return;}
+  $('status').textContent='connected';$('status').classList.add('on');$('conn').style.display='none';reset();read();
+};
+async function read(){
+  const dec=new TextDecoderStream();port.readable.pipeTo(dec.writable);reader=dec.readable.getReader();let buf='';
+  try{for(;;){const {value,done}=await reader.read();if(done)break;buf+=value;let i;
+    while((i=buf.indexOf('\n'))>=0){parse(buf.slice(0,i).trim());buf=buf.slice(i+1);}}}catch(e){}
+  $('status').textContent='disconnected';$('status').classList.remove('on');$('conn').style.display='';
+}
+function parse(l){const p=l.split(',');if(p.length!=5||p[0]!='D')return;
+  raw=[+p[1],+p[2]];sw=+p[3];bt=+p[4];cnt++;lastRx=Date.now();
+  if(cx===null){calib.push(raw.slice());if(calib.length>=25){cx=Math.round(calib.reduce((a,c)=>a+c[0],0)/25);cy=Math.round(calib.reduce((a,c)=>a+c[1],0)/25);mn=[cx,cy];mx=[cx,cy];}return;}
+  for(let i=0;i<2;i++){mn[i]=Math.min(mn[i],raw[i]);mx[i]=Math.max(mx[i],raw[i]);}
+  if(sw&&!swp){swn++;swok=true}if(bt&&!btp){btn++;btok=true}swp=sw;btp=bt;}
+const pct=(r,c)=>Math.max(-100,Math.min(100,(r-c)*100/Math.max(1,r>=c?4095-c:c)));
+setInterval(()=>{$('hz').textContent=cnt+' Hz';cnt=0},1000);
+const cv=$('pad'),g=cv.getContext('2d');
+function css(v){return getComputedStyle(document.documentElement).getPropertyValue(v)}
+function verdict(c,a,b){if(c<200||c>3900)return['bad','Centre at the rail – check VCC/wiring'];
+  if(b-a<300)return['warn','Move the stick'];
+  if(a<=150&&b>=3950)return['ok','Full range'];return['warn','Push to all edges'];}
+function draw(){
+  requestAnimationFrame(draw);
+  const W=400,c=W/2;g.clearRect(0,0,W,W);g.fillStyle=css('--bg');g.fillRect(0,0,W,W);
+  g.strokeStyle=css('--line');g.lineWidth=1;for(const r of[60,120,180]){g.beginPath();g.arc(c,c,r,0,7);g.stroke();}
+  g.beginPath();g.moveTo(c,10);g.lineTo(c,W-10);g.moveTo(10,c);g.lineTo(W-10,c);g.stroke();
+  g.fillStyle=css('--mut');g.font='12px sans-serif';g.textAlign='center';g.fillText('FORWARD',c,14);g.fillText('BACK',c,W-5);
+  const alive=Date.now()-lastRx<500;
+  if(!alive||cx===null){g.fillStyle=css('--warn');g.font='16px sans-serif';g.fillText(!port?'Connect the board':!alive?'No data…':'Calibrating – release the stick',c,c);}
+  else{
+    const px=pct(raw[0],cx),py=pct(raw[1],cy);
+    // clamp into circle
+    let dx=px/100*170,dy=-py/100*170;const m=Math.hypot(dx,dy);if(m>180){dx*=180/m;dy*=180/m}
+    trail.push([dx,dy]);if(trail.length>25)trail.shift();
+    trail.forEach((t,i)=>{g.fillStyle='rgba(77,163,255,'+(i/trail.length*.4)+')';g.beginPath();g.arc(c+t[0],c+t[1],8,0,7);g.fill();});
+    g.fillStyle=sw?css('--bad'):css('--acc');g.beginPath();g.arc(c+dx,c+dy,16,0,7);g.fill();
+    $('xv').textContent=raw[0]+'  ('+px.toFixed(0)+'%)';$('yv').textContent=raw[1]+'  ('+py.toFixed(0)+'%)';
+    for(const [id,v] of[['xb',px],['yb',py]]){const e=$(id);e.style.left=(v<0?50+v/2:50)+'%';e.style.width=Math.abs(v)/2+'%';}
+    const xs=verdict(cx,mn[0],mx[0]),ys=verdict(cy,mn[1],mx[1]);
+    const items=[[xs[0],'X axis',xs[1],mn[0]+'…'+mx[0]+' c='+cx],[ys[0],'Y axis',ys[1],mn[1]+'…'+mx[1]+' c='+cy],
+      [swok?'ok':'warn','Joystick click',swok?'Works':'Press it',''],[btok?'ok':'warn','Button',btok?'Works':'Press it','']];
+    const html=items.map(i=>`<li class="${i[0]}"><span class="s">${i[0]=='ok'?'✔':i[0]=='bad'?'✘':'•'}</span><span>${i[1]}: ${i[2]}</span><small>${i[3]}</small></li>`).join('');
+    if($('list').dataset.h!==html){$('list').innerHTML=html;$('list').dataset.h=html;}
+    $('all').style.display=items.every(i=>i[0]=='ok')?'block':'none';
+  }
+  $('ledJ').classList.toggle('down',!!sw);$('ledB').classList.toggle('down',!!bt);$('nJ').textContent=swn;$('nB').textContent=btn;
+}
+draw();
+</script></body></html>

@@ -3,6 +3,7 @@
 // plays a queue of notes. The amplifier (PA pin) is only on while sound plays.
 #pragma once
 #include <Arduino.h>
+#include <ESP_I2S.h>
 
 namespace audio {
 enum Melody : uint8_t {
@@ -29,4 +30,11 @@ void babble(Babble style, uint8_t syllables = 3);
 bool playWav(const char* path);                // queued; false if file missing
 void say(const char* key, Babble fallback = BAB_HAPPY);   // clip /voice/<key>.wav or babble
 bool hasClip(const char* key);
+
+// ---- Microphone input (ES7210, 16 kHz stereo 16 bit) - used by mic.cpp ----
+bool micBegin();                               // after init(): RX path + ES7210
+bool micOnline();
+size_t micRead(int16_t* buf, size_t bytes);    // blocking; interleaved L/R
+void micTap(void (*fn)(const int16_t* stereo, size_t frames));   // called for samples read by the speech engine
+I2SClass& i2sRef();                            // for ESP_SR (wake.cpp)
 }  // namespace audio

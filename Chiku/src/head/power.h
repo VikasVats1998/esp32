@@ -14,5 +14,8 @@ int batteryPercent();           // -1 = no battery
 bool charging();
 bool pmuOnline();
 float batteryVolts();
+float vbusVolts();              // USB volts (0 = not plugged in)
+float coreTempC();              // ESP32-S3 die temperature
+[[noreturn]] void shutdown();   // power off (PMU shutdown; deep sleep if USB keeps it alive; BOOT/PWR wakes)
 void keepAwake(bool on);        // alarm ringing etc: never sleep
 }  // namespace power

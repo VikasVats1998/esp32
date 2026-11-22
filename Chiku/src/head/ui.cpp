@@ -4,6 +4,8 @@
 #include "ui_screens.h"
 #include "face.h"
 #include "display.h"
+#include "logbuf.h"
+#include "imu.h"
 #include "touch.h"
 #include "power.h"
 #include "storage.h"
@@ -13,6 +15,10 @@ namespace ui {
 
 static lv_obj_t* screens[S_COUNT];
 static Screen cur = S_FACE;
+// Swipe carousel (S_MENU, S_CALIB, S_DESK are reached from the menu only).
+static const Screen ORDER[] = {S_FACE, S_CLOCK, S_WEATHER, S_TIMER, S_SONAR, S_CAMERA, S_SETTINGS,
+                               S_LIGHT, S_DEVICES, S_FAN, S_MOTION, S_SYSTEM};
+static const int ORDER_N = sizeof(ORDER) / sizeof(ORDER[0]);
 static lv_obj_t* testObj = nullptr;       // full-screen colour for display tests
 static volatile int reqPattern = 0;
 static int shownPattern = 0;
@@ -61,6 +67,11 @@ void init() {
   screens[S_MENU] = ui_menu::create(root);
   screens[S_CALIB] = ui_calib::create(root);
   screens[S_DESK] = ui_desk::create(root);
+  screens[S_LIGHT] = ui_light::create(root);
+  screens[S_DEVICES] = ui_devices::create(root);
+  screens[S_FAN] = ui_fan::create(root);
+  screens[S_MOTION] = ui_motion::create(root);
+  screens[S_SYSTEM] = ui_system::create(root);
 
   ring = lv_arc_create(lv_layer_top());
   lv_obj_set_size(ring, LCD_W, LCD_H);
@@ -110,10 +121,36 @@ static void updateRing() {
   lv_obj_remove_flag(ring, LV_OBJ_FLAG_HIDDEN);
 }
 
+// Keep the picture "ground down": when the board is held upright, pick the 90-degree step whose
+// bottom points at the ground. The switch happens at ~45 deg (with a margin so it never flutters);
+// lying flat leaves the current orientation alone.
+static void autoRotate() {
+  static int cand = -1;
+  static uint32_t candSince = 0;
+  float ax, ay, az;
+  imu::getAccel(ax, ay, az);
+  if (fabsf(az) > 0.8f) return;                              // flat on a table
+  float mag = max(fabsf(ax), fabsf(ay));
+  if (mag < 0.5f) return;
+  int want;
+  if (fabsf(ax) > fabsf(ay) * 1.25f) want = ax < 0 ? 0 : 180;
+  else if (fabsf(ay) > fabsf(ax) * 1.25f) want = ay > 0 ? 270 : 90;
+  else return;                                               // near the 45 deg boundary: keep as is
+  if (want == display::rotation()) { cand = -1; return; }
+  if (want != cand) { cand = want; candSince = millis(); return; }
+  if (millis() - candSince > 350) {                          // held steady
+    LOGI("ui", "rotate %d (ax %.2f ay %.2f)", want, ax, ay);
+    display::setRotation(want);
+    cand = -1;
+  }
+}
+
 void update(uint32_t dtMs) {
   applyPattern();
   if (cur == S_FACE) face::update(dtMs);
+  if (cur == S_MOTION) ui_motion::update();                 // bubble level: every frame
   slowAcc += dtMs;
+  if (slowAcc >= 100) autoRotate();
   if (slowAcc >= 250) {
     slowAcc = 0;
     switch (cur) {
@@ -124,6 +161,10 @@ void update(uint32_t dtMs) {
       case S_CAMERA: ui_camera::update(); break;
       case S_SETTINGS: ui_settings::update(); break;
       case S_DESK: ui_desk::update(); break;
+      case S_LIGHT: ui_light::update(); break;
+      case S_DEVICES: ui_devices::update(); break;
+      case S_FAN: ui_fan::update(); break;
+      case S_SYSTEM: ui_system::update(); break;
       default: break;
     }
     static uint8_t ringDiv = 0;
@@ -142,13 +183,14 @@ void update(uint32_t dtMs) {
 void onEvent(const events::Event& e) {
   switch (e.type) {
     case events::EV_SWIPE:
-      if (cur <= S_SETTINGS) {
-        int next = ((int)cur - e.a + S_SETTINGS + 1) % (S_SETTINGS + 1);   // swipe left (-1) = next
-        show((Screen)next);
+      for (int i = 0; i < ORDER_N; i++) {
+        if (ORDER[i] != cur) continue;
+        show(ORDER[(i - e.a + ORDER_N) % ORDER_N]);          // swipe left (-1) = next
+        break;
       }
       break;
     case events::EV_TOUCH_LONG:
-      if (cur != S_MENU && cur != S_CALIB && cur != S_DESK) show(S_MENU);
+      if (cur != S_FACE && cur != S_MENU && cur != S_CALIB && cur != S_DESK) show(S_MENU);   // on the face a long press = love
       break;
     case events::EV_SCREEN: show((Screen)e.a); break;
     case events::EV_SETTINGS:

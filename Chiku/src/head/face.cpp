@@ -2,6 +2,7 @@
 #include "face.h"
 #include "config.h"
 #include "events.h"
+#include "motion.h"
 #include <math.h>
 
 namespace face {
@@ -98,6 +99,8 @@ static float eyeCx[2] = {CX - 95, CX + 95}, eyeCy[2] = {EYE_CY, EYE_CY}, eyeW[2]
 static Fx shownFx = FX_NONE;
 static uint32_t nextFlash = 4000;
 static float flashOpa = 0;
+static uint32_t winkMs = 0, winkDur = 0, rageMs = 0;
+static int winkSide = 1;
 
 static lv_obj_t* rect(lv_obj_t* parent) {
   lv_obj_t* o = lv_obj_create(parent);
@@ -183,7 +186,34 @@ lv_obj_t* create(lv_obj_t* parent) {
 }
 
 // ---------- public setters ----------
-void setMood(Mood m, uint32_t holdMs) { reqMood = m; reqHold = holdMs; reqMoodFlag = true; }
+// Every feeling also moves the body: mood -> gait + cycles. A behaviour that sends its own gait
+// right after setMood() simply overrides this one (it is processed later).
+static void moodBody(Mood m) {
+  static Mood last = MOOD_COUNT;
+  static uint32_t lastMs = 0;
+  uint32_t now = millis();
+  if (m == last && now - lastMs < 3000) return;          // same mood re-requested: do not restart
+  last = m; lastMs = now;
+  motion::Gait g; uint8_t cyc = 3;
+  switch (m) {
+    case M_HAPPY: g = motion::G_HAPPY; cyc = 6; break;
+    case M_EXCITED: g = motion::G_EXCITED; cyc = 5; break;
+    case M_ANGRY: g = motion::G_ANGRY; break;
+    case M_SCARED: g = motion::G_SCARED; cyc = 10; break;
+    case M_SULK: g = motion::G_SULK; cyc = 2; break;
+    case M_JEALOUS: g = motion::G_JEALOUS; cyc = 4; break;
+    case M_SHY: g = motion::G_SHY; cyc = 2; break;
+    case M_LOVE: g = motion::G_LOVE; cyc = 2; break;
+    case M_SAD: case M_CRY: case M_SLEEPY: g = motion::G_SAD; cyc = 2; break;
+    case M_SURPRISED: g = motion::G_SURPRISED; cyc = 1; break;
+    case M_DIZZY: g = motion::G_WIGGLE; cyc = 8; break;
+    case M_THINKING: g = motion::G_TILT_L; cyc = 1; break;
+    default: return;                                     // normal / listening: leave the body alone
+  }
+  events::publish(events::EV_MOTION_CMD, g, cyc);
+}
+
+void setMood(Mood m, uint32_t holdMs) { reqMood = m; reqHold = holdMs; reqMoodFlag = true; moodBody(m); }
 void setBaseMood(Mood m) { baseMood = m; }
 void lookAt(float x, float y) {
   lookTX = constrain(x, -1.f, 1.f);
@@ -191,6 +221,8 @@ void lookAt(float x, float y) {
   autoLookBlockUntil = millis() + 3000;
 }
 void setFx(Fx fx) { fxMode = fx; }
+void wink(int side) { winkSide = side; winkDur = 520; winkMs = 1; }
+void rage(uint32_t ms) { rageMs = ms; }
 void setSleeping(bool on) { sleeping = on; }
 void setShake(bool on) { shaking = on; }
 Mood currentMood() { return mood; }
@@ -377,8 +409,16 @@ static void updateMoodFx(float dt, Mood m) {
 void update(uint32_t dtMs) {
   if (!root) return;
   float dt = dtMs / 1000.f;
-  float k = 1.f - expf(-dtMs / 90.f);          // easing speed
+  float k = 1.f - expf(-(float)dtMs / 90.f);          // easing speed
 
+  // 0. rage: angry face that shakes, then back to normal
+  if (rageMs) {
+    rageMs = rageMs > dtMs ? rageMs - dtMs : 0;
+    mood = M_ANGRY;
+    holdLeft = 400;
+    shaking = rageMs > 0;
+    if (!rageMs) mood = baseMood;
+  }
   // 1. pick up mood request
   if (reqMoodFlag) {
     reqMoodFlag = false;
@@ -442,6 +482,7 @@ void update(uint32_t dtMs) {
     else blinkT = 1;
   }
 
+  if (winkMs) { winkMs += dtMs; if (winkMs >= winkDur) winkMs = 0; }
   // 5. extras: pulse, spin, jitter
   pulse += dt * 6;
   spin += dt * 420;
@@ -458,7 +499,9 @@ void update(uint32_t dtMs) {
     EyeObjs& e = eyes[i];
     int side = i == 0 ? -1 : 1;
     float w = cw * breathe * lis;
-    float h = ch * breathe * lis * (1.f - 0.92f * blink);
+    float bl = blink;
+    if (winkMs && i == (winkSide > 0 ? 1 : 0)) bl = fmaxf(bl, sinf(3.14159f * fminf(1.f, (float)winkMs / winkDur)));   // wink: one lid closes
+    float h = ch * breathe * lis * (1.f - 0.92f * bl);
     if (lookX * side > 0.1f) w *= 1.f - 0.12f * fabsf(lookX);     // far-looking eye narrower
     if (mood == M_THINKING && side == 1) { w *= 0.85f; h *= 0.85f; }
     if (h < 6) h = 6;

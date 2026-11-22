@@ -27,7 +27,9 @@ void update(uint32_t dtMs);             // call at ~30 fps from the UI task
 void setMood(Mood m, uint32_t holdMs = 0);   // holdMs>0: go back to base mood after
 void setBaseMood(Mood m);                    // mood to rest in
 void lookAt(float x, float y);               // -1..1, disables auto look for 3 s
-void setFx(Fx fx);                           // weather effect (persistent)
+void setFx(Fx fx);                          // weather effect (persistent)
+void wink(int side = 1);                    // one eye closes briefly (+1 right, -1 left)
+void rage(uint32_t ms);                     // furious: angry face + shaking for ms
 void setSleeping(bool on);                   // eyes closed, very dim
 void setShake(bool on);                      // jitter (alarm ringing)
 Mood currentMood();

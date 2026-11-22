@@ -5,8 +5,10 @@
 | [Chiku](Chiku/docs/README.md) | robot head: face, feelings, servos, sonar, voice, clock, weather, Wi-Fi app API, + ESP32-CAM | Waveshare ESP32-S3-Touch-AMOLED-1.75 | builds, not yet tested on hardware |
 | [Jinu](Jinu/docs/README.md) | second robot: face, feelings, 5 touch pads, servos, sonar, voice | Waveshare ESP32-C6-LCD-1.47 | builds, not yet tested on hardware |
 | [Desk](Desk/docs/README.md) | standing-desk accessory: presses the handset buttons, reads the height, secure link | ESP32-S3 Super Mini | builds, wiring unverified |
+| [Server](Chiku/docs/HUB_AND_VOICE.md) | hub server (`python3 Server/server.py`): web dashboard, devices, sensor history, auto-discovered by the robots | PC | tested with a simulated robot |
 | [RobotApp](RobotApp/README.md) | phone app (Expo SDK 58) to control and test everything | iOS / Android | builds, tested against mocks |
 | [Bringup](Bringup/README.md) | laptop toolkit: flash, test every board, write a report to paste | Python | tested against simulators |
+| [ServoTest](ServoTest/README.md) | serial test for 4-5 servos on a PCA9685 16-channel driver | plain ESP32 (USB-C) | builds, not yet tested on hardware |
 | [Probe](Probe/README.md) | read-only measuring firmware (voltages, edges, serial) for unknown electronics | ESP32-S3 Super Mini | builds |
 | [Shared](Shared) | `DeskLink` (secure desk link) and `RemoteLink` (radio frames) libraries | - | PC tests pass |
 | [Gimbal](Gimbal/docs/README.md), [Remote](Remote/docs/README.md) | idea: radio remote for a DJI Osmo Mobile SE | ESP32-S3 Super Mini | **paused** (only an inquiry) |
