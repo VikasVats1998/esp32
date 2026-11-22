@@ -1,2 +1,8 @@
 build/
 .claude/
+
+# build output / downloaded dependencies inside the vendored reference projects
+.pio/
+managed_components/
+.cache/
+Reference/Lumo/D:/
