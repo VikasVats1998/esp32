@@ -42,6 +42,11 @@ export interface RobotState {
   servo: ServoInfo[];
   // ---- Chiku only (check `caps`) ----
   screen?: number;
+  screenName?: string;   // Chiku: name of the screen shown
+  rotation?: number;     // Chiku: screen rotation in degrees
+  setupDone?: boolean;
+  mic?: number;          // Chiku: sound level dB (-1 = no mic)
+  micOk?: boolean;
   batt?: number;
   charging?: boolean;
   pca?: boolean;

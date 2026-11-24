@@ -6,7 +6,13 @@
 #define LV_USE_STDLIB_MALLOC LV_STDLIB_BUILTIN
 #define LV_USE_STDLIB_STRING LV_STDLIB_BUILTIN
 #define LV_USE_STDLIB_SPRINTF LV_STDLIB_BUILTIN
-#define LV_MEM_SIZE (96 * 1024U)
+// LVGL's own heap. All screens are created at boot, so it needs room: 512 KB, placed in PSRAM on
+// the robot (on the PC simulator it is a plain static array).
+#define LV_MEM_SIZE (512 * 1024U)
+#ifdef ESP_PLATFORM
+#define LV_MEM_POOL_INCLUDE <esp_heap_caps.h>
+#define LV_MEM_POOL_ALLOC(size) heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT)
+#endif
 #define LV_MEM_POOL_EXPAND_SIZE 0
 #define LV_DEF_REFR_PERIOD 33
 #define LV_DPI_DEF 130

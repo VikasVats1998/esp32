@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { GestureResponderEvent, Pressable, StyleSheet, View } from 'react-native';
 
-import { EMOTES, MOODS, MOVES, SCREENS } from '@/api/catalog';
+import { emotesFor, moodsFor, MOVES, SCREENS } from '@/api/catalog';
 import type { Mode } from '@/api/types';
 import { ThemedText } from '@/components/themed-text';
 import { DeskPanel } from '@/components/desk-panel';
@@ -73,7 +73,7 @@ function RobotControl() {
       <Card title="Faces">
         <SwitchRow label="Hold the face" hint="Stay in the mood until you pick another (otherwise 5 s)" value={hold} onChange={setHold} />
         <Wrap>
-          {MOODS.map((m, i) => (
+          {moodsFor(isChiku ? 'chiku' : 'jinu').map((m, i) => (
             <Chip key={m} label={m} active={state?.mood === m} onPress={() => send((c) => c.mood(i, hold ? 0 : 5000))} />
           ))}
         </Wrap>
@@ -91,7 +91,7 @@ function RobotControl() {
 
       <Card title="Feelings (face + body + voice)">
         <Wrap>
-          {EMOTES.map((e) => (
+          {emotesFor(isChiku ? 'chiku' : 'jinu').map((e) => (
             <Chip key={e} label={e} onPress={() => send((c) => c.motion(e, 3))} />
           ))}
         </Wrap>
@@ -118,9 +118,10 @@ function RobotControl() {
       {isChiku ? (
         <Card title="Screen on Chiku">
           <Wrap>
-            {SCREENS.map((s, i) => (
-              <Chip key={s} label={s} active={state?.screen === i} onPress={() => send((c) => c.screen(i))} />
-            ))}
+            {SCREENS.filter((s) => s !== 'Boot' && s !== 'Goodnight').map((s) => {
+              const i = SCREENS.indexOf(s);
+              return <Chip key={s} label={s} active={state?.screen === i} onPress={() => send((c) => c.screen(i))} />;
+            })}
           </Wrap>
         </Card>
       ) : null}

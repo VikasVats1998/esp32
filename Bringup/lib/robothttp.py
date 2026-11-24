@@ -9,6 +9,9 @@ from .report import FAIL, INFO, PASS, SKIP
 
 MOODS = ["normal", "happy", "sad", "sleepy", "angry", "surprised", "dizzy", "love", "thinking", "listening",
          "jealous", "sulk", "shy", "excited", "scared", "cry"]
+CHIKU_MOODS = MOODS + ["curious", "confused", "bored", "wink", "error", "speaking"]   # UI kit faces (Chiku only)
+CHIKU_SCREENS = ["clock", "weather", "timer", "menu", "alarms", "moves", "sensors", "sonar", "camera", "network",
+                 "games", "settings", "power", "face"]
 
 
 class Robot:
@@ -69,6 +72,11 @@ def run(report, host, ask, active=False, kind=None, simulate=False):
     report.add(area, "sonar", PASS if 2 <= d <= 400 else FAIL, f"{d} cm" if d >= 0 else "no echo")
     if st.get("cam"):
         report.add(area, "camera link", PASS if st["cam"].get("alive") else FAIL, str(st["cam"].get("ip") or "offline"))
+    if "micOk" in st:
+        report.add(area, "microphones (ES7210)", PASS if st["micOk"] and st.get("mic", -1) >= 0 else FAIL,
+                   f"{st.get('mic')} dB now" if st["micOk"] else "ES7210 not found at 0x40")
+    if "rotation" in st:
+        report.add(area, "screen rotation", INFO, f"{st['rotation']} deg (Settings, Screen orientation on Chiku)")
     if st.get("batt") is not None:
         report.add(area, "battery", PASS if st["batt"] >= 0 else FAIL, f"{st['batt']}%" if st["batt"] >= 0 else "no battery reported")
 
@@ -124,12 +132,33 @@ def run(report, host, ask, active=False, kind=None, simulate=False):
         r.post("/api/display", {"p": 0})
     confirm("display colours", "Did you see red, green, blue, white, black and a smooth grey ramp (no dead pixels)?", colours)
 
+    moods = CHIKU_MOODS if kind == "chiku" else MOODS
+
     def faces():
-        for i, _ in enumerate(MOODS):
+        for i, _ in enumerate(moods):
             r.post("/api/mood", {"m": i, "hold": 0})
             time.sleep(1.3)
         r.post("/api/mood", {"m": 0, "hold": 0})
-    confirm("all 16 faces", "Were all 16 faces drawn correctly and smoothly?", faces)
+    confirm(f"all {len(moods)} faces", f"Were all {len(moods)} faces drawn correctly and smoothly?", faces)
+
+    if kind == "chiku":
+        def screens():
+            for name in CHIKU_SCREENS:
+                r.post("/api/screen", {"name": name})
+                time.sleep(1.5)
+        confirm("all screens", "Did every screen (clock, weather, timer, menu, ... settings, power) look right and upright?", screens)
+
+        if st.get("micOk"):
+            try:
+                print("  CLAP or talk loudly near Chiku for the next 4 seconds ...")
+                levels = []
+                for _ in range(16):
+                    levels.append(r.json("/api/state").get("mic", -1))
+                    time.sleep(0.25)
+                span = max(levels) - min(levels)
+                report.add(area, "microphones hear you", PASS if span >= 12 else FAIL, f"level {min(levels)}..{max(levels)} dB")
+            except Exception as e:
+                report.add(area, "microphones hear you", FAIL, str(e))
 
     def sound():
         for hz in (262, 440, 880, 1760):

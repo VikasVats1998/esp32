@@ -14,6 +14,7 @@ bool ringing();
 int ringingId();                       // 0..7 alarm, 100+ timer
 void stop();                           // stop ringing now
 void testRing();                       // ring for testing
+void snooze(uint8_t minutes);          // stop now, ring the same alarm again later
 
 // countdown timers
 int startTimer(uint32_t seconds);      // returns slot or -1
@@ -22,6 +23,9 @@ bool timerRunning(uint8_t slot);
 uint32_t timerRemainingMs(uint8_t slot);
 uint32_t timerTotalMs(uint8_t slot);
 int activeTimer();                     // running timer with least time left, -1 none
+void pauseTimer(uint8_t slot, bool pause);   // pause / continue
+bool timerPaused(uint8_t slot);
+uint8_t pomodoros();                   // 25-minute focus timers finished today (UI kit "Pomodoro 2/4")
 
 // stopwatch
 void swToggle();

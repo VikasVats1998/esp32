@@ -7,6 +7,7 @@
 #include "imu.h"
 #include "rtc_time.h"
 #include "audio.h"
+#include "mic.h"
 #include "servo.h"
 #include "sonar.h"
 #include "camlink.h"
@@ -94,6 +95,11 @@ void run() {
   audio::play(audio::MEL_STARTUP);
   pump(900);
   line("speaker", audio::online(), "(did you hear it?)");
+  {
+    char md[40];
+    snprintf(md, sizeof(md), mic::online() ? "(%d dB now)" : "(ES7210 not found at 0x40)", mic::db());
+    line("microphones", mic::online(), md);
+  }
 
   // 6. servos: move each slowly +-15 deg
   bool pca = servo::online();

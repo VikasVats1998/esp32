@@ -6,6 +6,10 @@ export const MOODS = [
   'jealous', 'sulk', 'shy', 'excited', 'scared', 'cry',
 ] as const;
 
+// Chiku has 6 more faces from the UI kit (same order as face.h; the first 16 are shared with Jinu).
+export const CHIKU_MOODS = [...MOODS, 'curious', 'confused', 'bored', 'wink', 'error', 'speaking'] as const;
+export const moodsFor = (kind: RobotKind): readonly string[] => (kind === 'chiku' ? CHIKU_MOODS : MOODS);
+
 export const MOVES = ['home', 'walk', 'back', 'left', 'right', 'bend', 'shakeleg', 'moonwalk', 'dance', 'jump', 'wiggle'] as const;
 
 export const EMOTES = [
@@ -14,10 +18,18 @@ export const EMOTES = [
 
 export const MELODIES = ['startup', 'alarm', 'happy', 'sad', 'pet', 'timer', 'dizzy', 'click'] as const;
 
-export const SCREENS = ['Face', 'Clock', 'Weather', 'Timer', 'Sonar', 'Camera', 'Settings', 'Menu', 'Calibration'] as const;
+// Chiku emotion moves from the UI kit pose table (motion.h)
+export const CHIKU_EMOTES = [...EMOTES, 'sleepy', 'curious', 'confused', 'bored', 'dizzy', 'wink', 'thinking', 'listen', 'speak'] as const;
+export const emotesFor = (kind: RobotKind): readonly string[] => (kind === 'chiku' ? CHIKU_EMOTES : EMOTES);
+
+// Chiku screens, index = id in ui.h (POST /api/screen?id= or ?name=)
+export const SCREENS = [
+  'Face', 'Clock', 'Weather', 'Timer', 'Menu', 'Alarms', 'Moves', 'Sensors', 'Sonar', 'Camera', 'Network', 'Games', 'Desk',
+  'Settings', 'Calibration', 'Orientation', 'Power', 'Goodnight', 'Ringing', 'Notify', 'Boot', 'Setup',
+] as const;
 
 export const SERVO_NAMES: Record<RobotKind, string[]> = {
-  chiku: ['Left hip', 'Right hip', 'Left ankle', 'Right ankle', 'Head pan'],
+  chiku: ['Left hip', 'Right hip', 'Left foot', 'Right foot', 'Neck'],
   jinu: ['Left hip', 'Right hip', 'Left ankle', 'Right ankle'],
 };
 

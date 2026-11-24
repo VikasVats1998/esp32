@@ -1,48 +1,63 @@
-// ui_clock.cpp - clock screen: time, date, next alarm, status line.
+// ui_clock.cpp - clock (UI kit): tick ring that fills with the seconds, mini eyes that stay alive,
+// big time, date, next alarm.
 #include "ui_screens.h"
 #include "ui_common.h"
 #include "rtc_time.h"
 #include "alarm_timer.h"
-#include "power.h"
-#include "net.h"
 
 namespace ui_clock {
-static lv_obj_t *lTime, *lSec, *lDate, *lAlarm, *lStatus;
+static lv_obj_t *root, *lTime, *lDate, *lNext;
+static uic::MiniEyes eyes;
+static int shownSec = -1;
 
-lv_obj_t* create(lv_obj_t* parent) {
-  lv_obj_t* p = uic::panel(parent);
-  lTime = uic::label(p, &lv_font_montserrat_48, 0xFFFFFF, "--:--", 140);
-  lSec = uic::label(p, &lv_font_montserrat_28, 0x5CE1FF, "", 205);
-  lDate = uic::label(p, &lv_font_montserrat_20, 0xA0A0A0, "", 255);
-  lAlarm = uic::label(p, &lv_font_montserrat_20, 0xFFB040, "", 300);
-  lStatus = uic::label(p, &lv_font_montserrat_14, 0x707070, "", 360);
-  return p;
+// 60 ticks around the edge; the ones up to the current second are cyan.
+static void drawTicks(lv_event_t* e) {
+  lv_layer_t* layer = lv_event_get_layer(e);
+  lv_draw_line_dsc_t d;
+  lv_draw_line_dsc_init(&d);
+  d.round_start = d.round_end = 1;
+  for (int i = 0; i < 60; i++) {
+    bool major = i % 5 == 0;
+    float a = (i * 6 - 90) * DEG_TO_RAD, r1 = major ? 196 : 204, r2 = 214;
+    d.width = major ? 4 : 2;
+    d.color = lv_color_hex(shownSec >= 0 && i <= shownSec ? uic::C_CYAN : (major ? 0x4B5563 : 0x262C33));
+    d.p1 = {(int32_t)(233 + r1 * cosf(a)), (int32_t)(233 + r1 * sinf(a))};
+    d.p2 = {(int32_t)(233 + r2 * cosf(a)), (int32_t)(233 + r2 * sinf(a))};
+    lv_draw_line(layer, &d);
+  }
 }
 
-void update() {
-  static const char* DAYS[] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
+lv_obj_t* create(lv_obj_t* parent) {
+  root = uic::panel(parent);
+  lv_obj_add_event_cb(root, drawTicks, LV_EVENT_DRAW_MAIN_END, nullptr);
+  eyes.create(root, 112, 30, 38, 52, uic::C_CYAN);
+  lTime = uic::label(root, &inter_72, uic::C_TEXT, "--:--", 160);
+  lDate = uic::label(root, &inter_20, uic::C_MUTED, "", 258);
+  lNext = uic::label(root, &inter_16, uic::C_CYAN, "", 300);
+  return root;
+}
+
+void update(uint32_t dt) {
+  eyes.update(dt);
+  static const char* DAYS[] = {"Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
   static const char* MON[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
   char buf[48];
   struct tm t;
   if (rtc_time::localTime(t)) {
     snprintf(buf, sizeof(buf), "%02d:%02d", t.tm_hour, t.tm_min);
     uic::setText(lTime, buf);
-    snprintf(buf, sizeof(buf), ":%02d", t.tm_sec);
-    uic::setText(lSec, buf);
-    snprintf(buf, sizeof(buf), "%s, %d %s %d", DAYS[t.tm_wday], t.tm_mday, MON[t.tm_mon], t.tm_year + 1900);
+    snprintf(buf, sizeof(buf), "%s, %d %s", DAYS[t.tm_wday], t.tm_mday, MON[t.tm_mon]);
     uic::setText(lDate, buf);
+    if (t.tm_sec != shownSec) { shownSec = t.tm_sec; lv_obj_invalidate(root); }
   } else {
     uic::setText(lTime, "--:--");
-    uic::setText(lSec, "waiting for time");
-    uic::setText(lDate, "");
+    uic::setText(lDate, "waiting for time");
   }
   char a[24];
-  if (alarm_timer::nextAlarmText(a, sizeof(a))) snprintf(buf, sizeof(buf), LV_SYMBOL_BELL " %s", a);
+  if (alarm_timer::nextAlarmText(a, sizeof(a))) snprintf(buf, sizeof(buf), "Next: alarm %s", a);
   else buf[0] = 0;
-  uic::setText(lAlarm, buf);
-  int pct = power::batteryPercent();
-  snprintf(buf, sizeof(buf), "%s   %s%d%%%s", net::connected() ? LV_SYMBOL_WIFI : "no wifi",
-           LV_SYMBOL_BATTERY_FULL " ", pct < 0 ? 0 : pct, power::charging() ? " " LV_SYMBOL_CHARGE : "");
-  uic::setText(lStatus, buf);
+  uic::setText(lNext, buf);
 }
+void onShow() { shownSec = -1; }
+void onHide() {}
 }  // namespace ui_clock

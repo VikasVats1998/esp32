@@ -3,7 +3,7 @@
 //   auto    - the app decides pass/fail itself from robot data
 //   watch   - the app asks you to do something (touch a pad, wave a hand) and waits for the robot to notice
 //   confirm - the app makes the robot do something and asks "did it work?" (you see / hear it)
-import { DISPLAY_PATTERNS, MOODS, PAD_NAMES, SERVO_NAMES } from '@/api/catalog';
+import { DISPLAY_PATTERNS, moodsFor, PAD_NAMES, SERVO_NAMES } from '@/api/catalog';
 import type { RobotClient } from '@/api/client';
 import type { RobotKind, RobotState } from '@/api/types';
 import type { DeskLinkClient } from '@/desk/client';
@@ -122,13 +122,14 @@ export function buildTests(kind: RobotKind): TestDef[] {
     help: 'Shows every face for 1.5 s. Check that each one looks right and the animation is smooth.',
     run: async (ctx) => {
       await ctx.client.setMode('manual');
-      for (let i = 0; i < MOODS.length; i++) {
-        ctx.note(`face ${i + 1}/${MOODS.length}: ${MOODS[i]}`);
+      const moods = moodsFor(kind);
+      for (let i = 0; i < moods.length; i++) {
+        ctx.note(`face ${i + 1}/${moods.length}: ${moods[i]}`);
         await ctx.client.mood(i, 0);
         await ctx.sleep(1500);
       }
       await ctx.client.mood(0, 0);
-      return { ask: 'Were all 16 faces drawn correctly and smoothly (no flicker or tearing)?' };
+      return { ask: `Were all ${moodsFor(kind).length} faces drawn correctly and smoothly (no flicker or tearing)?` };
     },
   });
   add({

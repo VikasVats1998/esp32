@@ -2,7 +2,7 @@
 
 | Folder | What | Board | Status |
 |---|---|---|---|
-| [Chiku](Chiku/docs/README.md) | robot head: face, feelings, servos, sonar, voice, clock, weather, Wi-Fi app API, + ESP32-CAM | Waveshare ESP32-S3-Touch-AMOLED-1.75 | builds, not yet tested on hardware |
+| [Chiku](Chiku/docs/README.md) | robot head: UI-kit face (22 moods) and screens, any-angle screen rotation, feelings + poses, servos, sonar, voice + microphones, clock, weather, games, Wi-Fi app API, + ESP32-CAM | Waveshare ESP32-S3-Touch-AMOLED-1.75 | builds, not yet tested on hardware |
 | [Jinu](Jinu/docs/README.md) | second robot: face, feelings, 5 touch pads, servos, sonar, voice | Waveshare ESP32-C6-LCD-1.47 | builds, not yet tested on hardware |
 | [Desk](Desk/docs/README.md) | standing-desk accessory: presses the handset buttons, reads the height, secure link | ESP32-S3 Super Mini | builds, wiring unverified |
 | [RobotApp](RobotApp/README.md) | phone app (Expo SDK 58) to control and test everything | iOS / Android | builds, tested against mocks |
@@ -50,6 +50,7 @@ cd RobotApp && npm install && npx expo start      # scan the QR code with Expo G
 
 | Command | Checks |
 |---|---|
+| `bash Chiku/tools/uisim/run.sh` | Chiku UI on the PC: every face and screen as PNG + rotation math check |
 | `Shared/DeskLink/test/run.sh` | desk crypto: C++ firmware vs TypeScript app |
 | `Shared/RemoteLink/test/run.sh` | radio frames, replay, pairing |
 | `cd RobotApp && npx tsx tools/smoke.mts localhost:8787 chiku` | app API client against `node tools/mock-robot.mjs` |

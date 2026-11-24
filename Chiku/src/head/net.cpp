@@ -20,6 +20,8 @@
 #include "imu.h"
 #include "pads.h"
 #include "ui.h"
+#include "ui_screens.h"
+#include "mic.h"
 #include <WiFi.h>
 #include <WebServer.h>
 #include <DNSServer.h>
@@ -41,6 +43,7 @@ static char ipStr[20] = "";
 bool connected() { return staUp; }
 bool portalActive() { return portal; }
 const char* ip() { return ipStr; }
+int rssi() { return staUp ? WiFi.RSSI() : 0; }
 void restartWifi() { restartReq = true; }
 
 // ---------- pages ----------
@@ -157,7 +160,7 @@ static void handleState() {
   d["api"] = 1;
   d["fw"] = FW_VERSION;
   JsonArray caps = d["caps"].to<JsonArray>();
-  for (const char* c : {"screens", "alarms", "timers", "weather", "imu", "cam", "pan", "battery", "display_test", "desk"}) caps.add(c);
+  for (const char* c : {"screens", "alarms", "timers", "weather", "imu", "cam", "pan", "battery", "display_test", "desk", "mic", "notify", "rotation"}) caps.add(c);
   deskJson(d["desk"].to<JsonObject>());
   d["name"] = ROBOT_NAME;
   d["uptime"] = millis() / 1000;
@@ -166,6 +169,11 @@ static void handleState() {
   d["mute"] = audio::muted();
   d["mood"] = face::moodName(face::currentMood());
   d["screen"] = (int)ui::current();
+  d["screenName"] = ui::screenName(ui::current());
+  d["rotation"] = s.screenRot;
+  d["setupDone"] = s.setupDone;
+  d["mic"] = mic::db();
+  d["micOk"] = mic::online();
   d["power"] = (int)power::state();
   d["pads"] = pads::rawState();
   d["padsOnline"] = pads::expanderOnline();
@@ -444,7 +452,22 @@ static void setupTestRoutes() {
   });
   route("/api/audio/stop", HTTP_POST, []() { audio::stop(); ok(); });
   route("/api/look", HTTP_POST, []() { face::lookAt(server.arg("x").toFloat(), server.arg("y").toFloat()); ok(); });
-  route("/api/screen", HTTP_POST, []() { events::publish(events::EV_SCREEN, server.arg("id").toInt()); ok(); });
+  route("/api/screen", HTTP_POST, []() {               // ?name=clock  (or ?id=1)
+    ui::Screen sc = (ui::Screen)constrain(server.arg("id").toInt(), 0, ui::S_COUNT - 1);
+    if (server.hasArg("name") && !ui::screenFromName(server.arg("name").c_str(), sc)) { server.send(400, "text/plain", "unknown screen"); return; }
+    events::publish(events::EV_SCREEN, sc); ok();
+  });
+  route("/api/notify", HTTP_POST, []() {               // ?title=Doorbell&text=Someone...&mood=surprised
+    face::Mood m = face::M_SURPRISED;
+    if (server.hasArg("mood")) face::moodFromName(server.arg("mood").c_str(), m);
+    ui_notify::post(server.arg("title").c_str(), server.arg("text").c_str(), m); ok();
+  });
+  route("/api/rotation", HTTP_POST, []() {             // ?deg=27 (&save=1)
+    int d = ((server.arg("deg").toInt() % 360) + 360) % 360;
+    ui::requestRotation(d);
+    if (server.arg("save") == "1") { storage::get().screenRot = d; storage::save(); }
+    ok();
+  });
   route("/api/display", HTTP_POST, []() { ui::setTestPattern(server.arg("p").toInt()); ok(); });
   route("/api/reboot", HTTP_POST, []() { ok(); delay(200); ESP.restart(); });
 }
@@ -475,9 +498,12 @@ static void setupRoutes() {
   route("/api/servo/test", HTTP_POST, []() {
     servo::setTarget(server.arg("ch").toInt(), server.arg("deg").toFloat(), 60); ok();
   });
-  route("/api/mood", HTTP_POST, []() {
-    int m = server.arg("m").toInt();
-    face::setMood((face::Mood)constrain(m, 0, face::MOOD_COUNT - 1), server.hasArg("hold") ? server.arg("hold").toInt() : 5000); ok();
+  route("/api/mood", HTTP_POST, []() {                 // ?name=happy (or ?m=1) &hold=ms &move=1 (face + pose + sound)
+    face::Mood m = (face::Mood)constrain(server.arg("m").toInt(), 0, face::MOOD_COUNT - 1);
+    if (server.hasArg("name") && !face::moodFromName(server.arg("name").c_str(), m)) { server.send(400, "text/plain", "unknown mood"); return; }
+    uint32_t hold = server.hasArg("hold") ? server.arg("hold").toInt() : 5000;
+    if (server.arg("move") == "1") behavior::express(m, hold); else face::setMood(m, hold);
+    ok();
   });
   route("/update", HTTP_GET, []() { server.send_P(200, "text/html", UPDATE_PAGE); });
   route("/update", HTTP_POST, []() {

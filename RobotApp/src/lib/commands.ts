@@ -1,5 +1,5 @@
 // The Console command line. Friendly commands ("mood happy") and raw requests ("POST /api/beep?hz=440&ms=300").
-import { EMOTES, MELODIES, MOODS, MOVES, SCREENS } from '@/api/catalog';
+import { CHIKU_EMOTES, CHIKU_MOODS, MELODIES, MOVES, SCREENS } from '@/api/catalog';
 import type { RobotClient } from '@/api/client';
 import type { Mode } from '@/api/types';
 
@@ -21,7 +21,7 @@ export const HELP = `Commands:
   state    diag    reboot
   desk state|up|down|stop|preset <n>|save <n>|tap <key> [ms]|height <cm>|arm on|off|log|raw|clients|pair [host]|forget
   GET /api/...   POST /api/...?x=1 [json body]   (any request)
-Gaits: ${[...MOVES, ...EMOTES].join(' ')}`;
+Gaits: ${[...MOVES, ...CHIKU_EMOTES].join(' ')}`;
 
 const num = (s: string | undefined, d?: number) => {
   const n = Number(s);
@@ -80,7 +80,7 @@ export async function runCommand(client: RobotClient | undefined, input: string,
     case 'mute':
       return reply(await client.setMute(a[0] !== 'off' && a[0] !== '0'));
     case 'mood':
-      return reply(await client.mood(index(MOODS, a[0] ?? '', 'mood'), num(a[1], 5000)));
+      return reply(await client.mood(index(CHIKU_MOODS, a[0] ?? '', 'mood'), num(a[1], 5000)));
     case 'look':
       return reply(await client.look(num(a[0]), num(a[1], 0)));
     case 'move':

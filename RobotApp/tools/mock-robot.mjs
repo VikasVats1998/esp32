@@ -5,8 +5,9 @@
 // It implements the same HTTP API as the firmware (docs/API.md) with simulated sensors.
 import http from 'node:http';
 
-const MOODS = ['normal','happy','sad','sleepy','angry','surprised','dizzy','love','thinking','listening','jealous','sulk','shy','excited','scared','cry'];
-const GAITS = ['home','walk','back','left','right','bend','shakeleg','moonwalk','dance','jump','wiggle','happy','excited','angry','scared','sulk','jealous','shy','love','sad','surprised','tiltl','tiltr'];
+const MOODS = ['normal','happy','sad','sleepy','angry','surprised','dizzy','love','thinking','listening','jealous','sulk','shy','excited','scared','cry','curious','confused','bored','wink','error','speaking'];
+const SCREENS = ['face','clock','weather','timer','menu','alarms','moves','sensors','sonar','camera','network','games','desk','settings','calibration','orientation','power','goodnight','ringing','notify','boot','setup'];
+const GAITS = ['home','walk','back','left','right','bend','shakeleg','moonwalk','dance','jump','wiggle','happy','excited','angry','scared','sulk','jealous','shy','love','sad','surprised','tiltl','tiltr','sleepy','curious','confused','bored','dizzy','wink','thinking','listen','speak'];
 
 function makeRobot(kind, port) {
   const chiku = kind === 'chiku';
@@ -14,7 +15,7 @@ function makeRobot(kind, port) {
   const t0 = Date.now();
   const r = {
     mode: 'auto', mute: false, mood: 'normal', brightness: 200, volume: 60, dist: 80, pads: 0, avoid: false, gait: 'home', busy: false,
-    power: 0, screen: 0, lat: 47.73, lon: 7.55,
+    power: 0, screen: 0, rotation: 0, lat: 47.73, lon: 7.55,
     servo: Array.from({ length: nServos }, () => ({ trim: 0, min: chiku && false ? 0 : 10, max: 170, inv: false, cur: 90 })),
     alarms: Array.from({ length: 8 }, () => ({ on: false, h: 7, m: 0, days: 127 })),
     timers: [0, 0, 0], desk: { paired: false, host: '' }, events: [], count: 0, log: [], fwlog: [], logCount: 0, snap: 0, led: null,
@@ -31,13 +32,13 @@ function makeRobot(kind, port) {
   setInterval(() => { r.dist = Math.max(3, Math.min(250, Math.round(r.dist + (Math.random() - 0.5) * 20))); }, 300);
 
   const state = () => ({
-    robot: kind, api: 1, fw: 'mock', caps: chiku ? ['screens','alarms','timers','weather','imu','cam','pan','battery','display_test','desk'] : ['display_test','rgb_led','desk'],
+    robot: kind, api: 1, fw: 'mock', caps: chiku ? ['screens','alarms','timers','weather','imu','cam','pan','battery','display_test','desk','mic','notify','rotation'] : ['display_test','rgb_led','desk'],
     name: kind, ip: `127.0.0.1:${port}`, ssid: 'MockWiFi', rssi: -55, uptime: Math.round((Date.now() - t0) / 1000), heap: 180000,
     desk: { paired: r.desk.paired, host: r.desk.host, ok: r.desk.paired, hv: r.desk.paired, h: 82.0, moving: false, dir: 0, armed: true, travel: false, src: 'display', err: '', age: 300 },
     mode: r.mode, mute: r.mute, mood: r.mood, brightness: r.brightness, volume: r.volume, dist: r.dist, pads: r.pads, padsOnline: true,
     avoid: r.avoid, gait: r.gait, busy: r.busy, power: r.power, audio: true, servo: r.servo,
     ...(chiku ? {
-      screen: r.screen, batt: 83, charging: false, pca: true, psram: 7000000, lat: r.lat, lon: r.lon,
+      screen: r.screen, screenName: SCREENS[r.screen], rotation: r.rotation, setupDone: true, mic: 35 + Math.round(Math.random() * 40), micOk: true, batt: 83, charging: false, pca: true, psram: 7000000, lat: r.lat, lon: r.lon,
       imu: { ok: true, x: 0.02, y: 0.01, z: 1.0, tilt: 1.5 },
       cam: { alive: true, ip: '192.168.1.50', state: 'sleep', stream: 'http://192.168.1.50/stream', snap: r.snap },
       weather: { valid: true, temp: 12.4, min: 8, max: 15, text: 'Partly cloudy' },
@@ -52,6 +53,7 @@ function makeRobot(kind, port) {
     const q = Object.fromEntries(u.searchParams);
     const send = (obj, code = 200) => { res.writeHead(code, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(obj)); };
     const ok = (msg) => send(msg ? { ok: true, msg } : { ok: true });
+    const bad = (msg) => { res.writeHead(400); return res.end(msg); };
     logCall(`${req.method} ${u.pathname}${u.search}`);
     if (!['/api/state','/api/events','/api/log'].includes(u.pathname)) fwlog(2, `[api] ${req.method} ${u.pathname} ${[...u.searchParams].map(([k, v]) => `${k}=${v}`).join(' ')}`.trim());
     const p = u.pathname;
@@ -74,7 +76,7 @@ function makeRobot(kind, port) {
     switch (p) {
       case '/api/mode': if (!['auto','manual','explore'].includes(q.m)) { res.writeHead(400); return res.end('bad'); } r.mode = q.m; r.avoid = q.m === 'explore'; r.power = 0; fwlog(2, `[mode] -> ${q.m}`); return ok(q.m);
       case '/api/mute': r.mute = q.on === '1'; return ok();
-      case '/api/mood': r.mood = MOODS[+q.m] ?? 'normal'; { const h = q.hold === undefined ? 5000 : +q.hold; if (h > 0) setTimeout(() => { r.mood = 'normal'; }, h); } return ok();
+      case '/api/mood': if (q.name && !MOODS.includes(q.name)) return bad('unknown mood'); r.mood = q.name ?? MOODS[+q.m] ?? 'normal'; { const h = q.hold === undefined ? 5000 : +q.hold; if (h > 0) setTimeout(() => { r.mood = 'normal'; }, h); } return ok();
       case '/api/motion':
         if (q.stop) { r.gait = 'home'; r.busy = false; return ok(); }
         if (q.avoid !== undefined) { r.avoid = q.avoid === '1'; return ok(); }
@@ -89,7 +91,9 @@ function makeRobot(kind, port) {
       case '/api/desk/unpair': if (r.token !== q.token) { res.writeHead(401); return res.end('wrong token'); } r.token = undefined; r.desk = { paired: false, host: '' }; return ok('unpaired');
       case '/api/desk/cmd': if (!r.token || r.token !== q.token) { res.writeHead(401); return res.end('wrong token'); } if (!r.desk.paired) { res.writeHead(400); return res.end('desk not paired'); } fwlog(2, `[desk] -> ${q.op}`); return ok(q.op);
       case '/api/led': r.led = q.off ? null : [+q.r, +q.g, +q.b]; return ok();
-      case '/api/screen': r.screen = +q.id; return ok();
+      case '/api/screen': if (q.name) { if (!SCREENS.includes(q.name)) return bad('unknown screen'); r.screen = SCREENS.indexOf(q.name); } else r.screen = +q.id; return ok();
+      case '/api/notify': push('notify', MOODS.indexOf(q.mood ?? 'surprised')); r.screen = SCREENS.indexOf('notify'); return ok();
+      case '/api/rotation': r.rotation = ((+q.deg % 360) + 360) % 360; return ok();
       case '/api/display': return ok();
       case '/api/sim':
         if (q.pad !== undefined) { const bit = 1 << +q.pad; push('pad', +q.pad, +q.g || 1); r.pads |= bit; setTimeout(() => { r.pads &= ~bit; }, 300); }

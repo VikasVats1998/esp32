@@ -2,6 +2,11 @@
 
 Use the phone app (`RobotApp`): **Test > Checklist** has a test for every screen, sensor, pad, motor and sound with pass/fail and a shareable report; **Console** shows the complete robot log and lets you send commands. Put the robot in **Manual** mode first. (Manual testing also works with the app's **Test** views or the web page `http://chiku.local`.) API: `RobotApp/docs/API.md`.
 
+## 0. On the PC first (no hardware)
+- [ ] `bash Chiku/tools/uisim/run.sh` (after one `pio run -d Chiku -e head`): builds the real face and screen
+      code for the PC, checks the screen-rotation math, and writes every face, animation frame and screen to
+      `Chiku/tools/uisim/out/*.png`. Compare them with the UI kit.
+
 ## 1. Before power
 - [ ] 5 V buck output measured (5.0 V) **before** connecting the PCA9685 V+; common GND everywhere.
 - [ ] PCA9685 on GPIO17/18, PCF8574 (0x20) on the same two wires, TTP223 body pad on GPIO16.
@@ -12,7 +17,7 @@ Use the phone app (`RobotApp`): **Test > Checklist** has a test for every screen
 - [ ] ESP32-CAM: `pio run -e cam -t upload` (IO0 to GND, then remove and reset).
 
 ## 3. Self-test (hold BOOT while powering on)
-Report on screen + serial. Expect PASS for: display, touch, imu, rtc, speaker, pca9685, camlink, sonar, pads, voice.
+Report on screen + serial. Expect PASS for: display, touch, imu, rtc, speaker, microphones, pca9685, camlink, sonar, pads, voice.
 - Fails -> see the table at the end.
 
 ## 4. Test each part by hand (app: Test tab, mode = manual)
@@ -20,7 +25,10 @@ Report on screen + serial. Expect PASS for: display, touch, imu, rtc, speaker, p
 |---|---|---|
 | Display | Display test: red / green / blue / white / ramp | solid colours, smooth ramp, no dead lines |
 | Touch | tap / swipe the screen, watch the event log | `tap`, `swipe` events |
-| Faces | tap each of the 16 moods | matches the name, no flicker |
+| Faces | tap each of the 22 moods (Settings on Chiku: Mood demo shows them with names) | matches the name, no flicker |
+| Screens | swipe left/right (clock, weather, timer), swipe up (menu), open every menu ring, swipe down = back, hold 3 s = power menu | like the UI kit pictures, upright |
+| Orientation | Settings, Screen orientation, Auto | arrow points up, "Level OK", touch hits what you see |
+| Microphones | Sensors screen, Sound tile; clap | dB value jumps; a loud clap makes the face surprised |
 | Sound | beep 440 Hz, each melody, each voice clip, volume slider | clean, no crackle at 60 % |
 | Servos | each slider 80 / 90 / 100 | correct servo, no buzzing, released after 2 s |
 | Pads | touch each of the 5 pads once, twice, three times, hold | log shows pad + gesture; pad indicator lights |
@@ -37,6 +45,8 @@ Report on screen + serial. Expect PASS for: display, touch, imu, rtc, speaker, p
 |---|---|
 | `pca9685` FAIL | SDA/SCL swapped, no 3V3, address pads |
 | `pads` FAIL / 0x00 | PCF8574 address (0x20), TTP223 VCC, wiring order P0-P3 |
+| `microphones` FAIL | ES7210 at 0x40 on the onboard bus; I2S DIN = GPIO10 |
+| picture / touch turned | Settings, Screen orientation (any angle); if Auto turns the wrong way see CALIBRATION.md |
 | `sonar` FAIL | cam link first; ECHO on CAM GPIO2, TRIG GPIO15, 3.3 V sensor |
 | `camlink` FAIL | TX/RX crossed? cam powered from 5 V? |
 | `speaker` silent | PA pin, volume, mute switch in the app |

@@ -13,10 +13,14 @@
 #include "storage.h"
 #include "camlink.h"
 #include "pads.h"
+#include "imu.h"
+#include "ui_screens.h"
 
 namespace behavior {
 
-static bool petting = false;
+static uint32_t dizzyCooldown = 0, chargeShowUntil = 0;
+static bool lowBatt = false, hadWifi = false;
+static uint8_t idleStage = 0;             // 0 awake, 1 bored, 2 sleepy
 static uint32_t ringTick = 0;
 static bool ringSide = false;
 
@@ -46,6 +50,43 @@ static void applyWeather() {
     case face::FX_HOT: face::setMood(face::M_SLEEPY, 3000); break;
     default: break;
   }
+}
+
+// ---------- emotions: face + pose + sound (UI kit page 3) ----------
+struct Emotion { motion::Gait gait; uint8_t cycles; audio::Babble talk; const char* clip; };
+static const Emotion EMO[face::MOOD_COUNT] = {
+  /* normal    */ {motion::G_HOME, 0, audio::BAB_HAPPY, nullptr},
+  /* happy     */ {motion::G_HAPPY, 2, audio::BAB_HAPPY, "happy"},
+  /* sad       */ {motion::G_SAD, 2, audio::BAB_SAD, "sad"},
+  /* sleepy    */ {motion::G_SLEEPY, 1, audio::BAB_SAD, nullptr},
+  /* angry     */ {motion::G_ANGRY, 3, audio::BAB_ANGRY, "angry"},
+  /* surprised */ {motion::G_SURPRISED, 1, audio::BAB_SURPRISE, "surprised"},
+  /* dizzy     */ {motion::G_DIZZY, 3, audio::BAB_QUESTION, nullptr},
+  /* love      */ {motion::G_LOVE, 2, audio::BAB_LOVE, "love"},
+  /* thinking  */ {motion::G_THINKING, 2, audio::BAB_QUESTION, nullptr},
+  /* listening */ {motion::G_LISTEN, 3, audio::BAB_QUESTION, nullptr},
+  /* jealous   */ {motion::G_JEALOUS, 5, audio::BAB_QUESTION, "jealous"},
+  /* sulk      */ {motion::G_SULK, 3, audio::BAB_SAD, "sulk"},
+  /* shy       */ {motion::G_SHY, 3, audio::BAB_SHY, "shy"},
+  /* excited   */ {motion::G_EXCITED, 3, audio::BAB_HAPPY, "excited"},
+  /* scared    */ {motion::G_SCARED, 12, audio::BAB_SURPRISE, "scared"},
+  /* cry       */ {motion::G_SAD, 2, audio::BAB_SAD, "sad"},
+  /* curious   */ {motion::G_CURIOUS, 2, audio::BAB_QUESTION, nullptr},
+  /* confused  */ {motion::G_CONFUSED, 2, audio::BAB_QUESTION, nullptr},
+  /* bored     */ {motion::G_BORED, 1, audio::BAB_SAD, nullptr},
+  /* wink      */ {motion::G_WINK, 1, audio::BAB_HAPPY, nullptr},
+  /* error     */ {motion::G_HOME, 0, audio::BAB_SAD, nullptr},
+  /* speaking  */ {motion::G_SPEAK, 6, audio::BAB_HAPPY, nullptr},
+};
+
+void express(uint8_t m, uint32_t holdMs, bool sound) {
+  if (m >= face::MOOD_COUNT) return;
+  face::setMood((face::Mood)m, holdMs);             // the face changes first ...
+  const Emotion& e = EMO[m];
+  if (m == face::M_ERROR) servo::freeze();          // UI kit: error = stop + detach servos (safe)
+  else if (e.cycles) events::publish(events::EV_MOTION_CMD, e.gait, e.cycles);   // ... the body follows
+  if (!sound) return;
+  if (e.clip) audio::say(e.clip, e.talk); else audio::babble(e.talk, 2);
 }
 
 // ---------- feelings engine ----------
@@ -141,7 +182,7 @@ static void idleLife(uint32_t now) {
     return;
   }
   switch (random(0, 6)) {
-    case 0: face::setMood(face::M_THINKING, 2500); events::publish(events::EV_MOTION_CMD, motion::G_TILT_L, 1); break;
+    case 0: express(face::M_CURIOUS, 2500, false); break;
     case 1: face::setMood(face::M_HAPPY, 1500); audio::babble(audio::BAB_HAPPY, 2); break;
     case 2: face::setMood(face::M_SLEEPY, 2500); break;                          // yawn
     case 3: face::setMood(affection > 60 ? face::M_LOVE : face::M_HAPPY, 2000);
@@ -176,7 +217,8 @@ void onEvent(const events::Event& e) {
   bool ringing = alarm_timer::ringing();
   if (curMode == MODE_MANUAL) {                // testing by hand: only housekeeping events are handled
     switch (e.type) {
-      case EV_ALARM_RING: case EV_ALARM_STOP: case EV_WEATHER: case EV_POWER: case EV_WAKE: case EV_SETTINGS: break;
+      case EV_ALARM_RING: case EV_ALARM_STOP: case EV_WEATHER: case EV_POWER: case EV_WAKE: case EV_SETTINGS:
+      case EV_BATTERY: case EV_WIFI: break;
       default: return;
     }
   }
@@ -184,8 +226,8 @@ void onEvent(const events::Event& e) {
     case EV_TOUCH_TAP:
       if (ringing) { alarm_timer::stop(); break; }
       if (ui::current() == ui::S_FACE) {
-        if (random(0, 2)) { face::setMood(face::M_HAPPY, 1800); audio::play(audio::MEL_HAPPY); }
-        else { face::setMood(face::M_SURPRISED, 1500); audio::beep(1200, 60); }
+        static const face::Mood TAP[3] = {face::M_HAPPY, face::M_WINK, face::M_LOVE};   // UI kit: tap face
+        express(TAP[random(0, 3)], 2200);
         float lx = (e.a - LCD_W / 2) / (LCD_W / 2.f), ly = (e.b - LCD_H / 2) / (LCD_H / 2.f);
         face::lookAt(lx, ly);                       // look at the finger
         events::publish(EV_LOOK, (int)(lx * 100), (int)(ly * 100));
@@ -193,8 +235,18 @@ void onEvent(const events::Event& e) {
       break;
     case EV_SHAKE:
       if (ringing) { alarm_timer::stop(); break; }
-      face::setMood(face::M_DIZZY, 3500);
-      audio::play(audio::MEL_DIZZY);
+      if (ui::current() == ui::S_GAMES) { ui_games::onPadOrShake(2); break; }   // dice
+      express(face::M_ANGRY, 3000);                  // UI kit: shaken -> angry
+      break;
+    case EV_TILT:                                    // UI kit: tilted -> dizzy
+      if (imu::tiltDeg() > 30 && imu::tiltDeg() < 55 && millis() > dizzyCooldown) {
+        dizzyCooldown = millis() + 8000;
+        express(face::M_DIZZY, 3500, false);
+        audio::play(audio::MEL_DIZZY);
+      }
+      break;
+    case EV_LOUD:                                    // UI kit: loud sound -> surprised
+      if (ui::current() == ui::S_FACE && power::state() != power::SLEEP) express(face::M_SURPRISED, 1800);
       break;
     case EV_PICKUP: face::setMood(face::M_SURPRISED, 1500); audio::beep(1400, 50); break;
     case EV_PUTDOWN: face::setMood(face::M_HAPPY, 1200); break;
@@ -204,14 +256,17 @@ void onEvent(const events::Event& e) {
       face::setMood(face::M_SAD, 5000);
       audio::play(audio::MEL_SAD);
       break;
-    case EV_PAD: onPad(e.a, e.b); break;
+    case EV_PAD:
+      if (ui::current() == ui::S_GAMES) { ui_games::onPadOrShake(1); break; }   // reaction game
+      onPad(e.a, e.b);
+      break;
     case EV_OBSTACLE:
       face::setMood(face::M_SURPRISED, 1000);
       break;
-    case EV_ALARM_RING:
+    case EV_ALARM_RING:                              // ui.cpp shows the ringing screen
       power::keepAwake(true);
-      ui::show(ui::S_FACE);
       face::setMood(face::M_SURPRISED, 0);
+      events::publish(EV_MOTION_CMD, motion::G_SURPRISED, 1);
       face::setShake(true);
       audio::say(e.a >= 100 ? "timer" : "alarm", audio::BAB_SURPRISE);   // spoken line first
       audio::play(e.a >= 100 ? audio::MEL_TIMER : audio::MEL_ALARM, true);
@@ -224,12 +279,31 @@ void onEvent(const events::Event& e) {
       motion::stop();
       break;
     case EV_WEATHER: applyWeather(); break;
+    case EV_TIMER_DONE:                              // UI kit: timer -> dance at the end
+      events::publish(EV_MOTION_CMD, motion::G_DANCE, 4);
+      break;
     case EV_POWER:
       face::setSleeping(e.a == power::SLEEP);
+      motion::setIdleBreath(e.a == power::ACTIVE);
       break;
-    case EV_WAKE:
-      face::setMood(face::M_HAPPY, 1200);
+    case EV_WAKE:                                    // UI kit wake-up: eyes open, neck stretches up
+      face::setBaseMood(face::M_NORMAL);
+      face::playWakeUp();
+      events::publish(EV_MOTION_CMD, motion::G_CURIOUS, 1);
       audio::say("hello", audio::BAB_HAPPY);
+      break;
+    case EV_BATTERY:
+      lowBatt = e.a == 1;
+      motion::setSpeedScale(lowBatt ? 0.6f : 1.f);   // tired: slower moves
+      if (e.a == 2) chargeShowUntil = millis() + 8000;
+      face::setStatus(e.a == 2 ? face::ST_CHARGING : lowBatt ? face::ST_LOW_BATTERY : face::ST_NONE, e.b);
+      break;
+    case EV_WIFI:
+      if (e.a) hadWifi = true;
+      else if (hadWifi) express(face::M_ERROR, 3000, false);   // UI kit: no Wi-Fi -> error face
+      break;
+    case EV_NOTIFY:
+      express((uint8_t)e.a, 5000);
       break;
     case EV_SETTINGS:
       audio::setVolume(storage::get().volume);
@@ -255,6 +329,20 @@ void update(uint32_t dtMs) {
   affection = fmaxf(0, affection - dtMs * 0.0003f);
   annoyance = fmaxf(0, annoyance - dtMs * 0.006f);
   idleLife(millis());
+  // UI kit: no input 5 min -> bored, then sleepy, then the sleep screen (power.cpp)
+  uint32_t idle = power::idleMs();
+  uint8_t stage = idle > SLEEPY_AFTER_MS ? 2 : idle > BORED_AFTER_MS ? 1 : 0;
+  if (alarm_timer::ringing() || power::state() == power::SLEEP) stage = idleStage;
+  if (stage != idleStage) {
+    idleStage = stage;
+    face::Mood m = stage == 2 ? face::M_SLEEPY : stage == 1 ? face::M_BORED : face::M_NORMAL;
+    face::setBaseMood(m);
+    if (stage) express(m, 0, false); else face::setMood(face::M_NORMAL, 0);
+  }
+  if (chargeShowUntil && millis() > chargeShowUntil) {   // charging look shows for a few seconds
+    chargeShowUntil = 0;
+    face::setStatus(lowBatt ? face::ST_LOW_BATTERY : face::ST_NONE, power::batteryPercent());
+  }
   // While ringing: shake the head left and right
   if (alarm_timer::ringing()) {
     ringTick += dtMs;

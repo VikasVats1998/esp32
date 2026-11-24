@@ -8,5 +8,6 @@ void init();                    // creates the network task
 bool connected();
 bool portalActive();
 const char* ip();               // station IP or "" 
+int rssi();                     // Wi-Fi signal in dBm (0 if not connected)
 void restartWifi();             // apply new credentials
 }  // namespace net

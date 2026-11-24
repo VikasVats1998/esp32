@@ -22,6 +22,7 @@
 #include "sonar.h"
 #include "camlink.h"
 #include "audio.h"
+#include "mic.h"
 #include "power.h"
 #include "rtc_time.h"
 #include "alarm_timer.h"
@@ -141,6 +142,9 @@ void setup() {
 #if FEATURE_AUDIO
   diag::set("audio", audio::init(), "ES8311 + I2S");
 #endif
+#if FEATURE_MIC
+  diag::set("mic", mic::init(), "ES7210 0x40");
+#endif
   diag::set("pad_expander", pads::init(), "PCF8574 0x20");
 #if FEATURE_SERVOS
   diag::set("servo_driver", servo::init(), "PCA9685 GPIO17/18");
@@ -151,6 +155,7 @@ void setup() {
   if (test) selftest::run();            // never returns
 
   ui::applyBrightness();
+  motion::setIdleBreath(true);
   audio::play(audio::MEL_STARTUP);
   audio::say("hello", audio::BAB_HAPPY);
   xTaskCreatePinnedToCore(uiTask, "ui", 12288, nullptr, 3, nullptr, 1);

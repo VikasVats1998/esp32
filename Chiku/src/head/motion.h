@@ -14,6 +14,8 @@ enum Gait : uint8_t {
   // emotions: body language that goes with a face mood
   G_HAPPY, G_EXCITED, G_ANGRY, G_SCARED, G_SULK, G_JEALOUS, G_SHY, G_LOVE, G_SAD, G_SURPRISED,
   G_TILT_L, G_TILT_R,                      // curious head tilt towards left / right
+  // added with the UI kit (servo pose table)
+  G_SLEEPY, G_CURIOUS, G_CONFUSED, G_BORED, G_DIZZY, G_WINK, G_THINKING, G_LISTEN, G_SPEAK,
   G_COUNT
 };
 
@@ -28,5 +30,7 @@ bool avoidMode();
 const char* gaitName(Gait g);
 bool gaitFromName(const char* name, Gait& out);
 void setFollowLook(bool on);             // false: head pan ignores the look direction (manual mode)
-void lookPan(float x);                   // head pan follows look (-1..1)
+void lookPan(float x);                   // head pan follows look (-1..1), up to LOOK_NECK_DEG
+void setSpeedScale(float k);             // 1 = normal, < 1 slower (low battery)
+void setIdleBreath(bool on);             // tiny neck breathing while idle (IDLE_BREATHE_DEG)
 }  // namespace motion

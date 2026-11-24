@@ -18,6 +18,7 @@ static int pct = -1;
 static bool chg = false;
 static float volts = 0;
 static uint32_t lastBatt = 0;
+static bool low = false;
 
 static void setState(State s) {
   if (s == st) return;
@@ -50,6 +51,18 @@ State state() { return st; }
 int batteryPercent() { return pct; }
 bool charging() { return chg; }
 bool pmuOnline() { return pmuOk; }
+bool lowBattery() { return low; }
+uint32_t idleMs() { return millis() - lastActivity; }
+void sleepNow() { lastActivity = millis() - SLEEP_AFTER_MS - 1; awake = false; setState(SLEEP); }
+
+void powerOff() {
+  LOGI("power", "power off");
+  delay(100);
+#if FEATURE_PMU
+  if (pmuOk) { bus::Guard g; pmu.shutdown(); }
+#endif
+  esp_deep_sleep_start();                         // no PMU: sleep until RESET
+}
 float batteryVolts() { return volts; }
 
 void update() {
@@ -66,7 +79,13 @@ void update() {
       pct = pmu.getBatteryPercent();
       volts = pmu.getBattVoltage() / 1000.f;
     } else pct = -1;
+    bool wasChg = chg;
     chg = pmu.isCharging();
+    bool nowLow = pct >= 0 && pct < LOW_BATTERY_PCT && !chg;
+    if (chg && !wasChg) events::publish(events::EV_BATTERY, 2, pct);
+    else if (nowLow && !low) events::publish(events::EV_BATTERY, 1, pct);
+    else if (!nowLow && low && !chg) events::publish(events::EV_BATTERY, 3, pct);
+    low = nowLow;
   }
 }
 

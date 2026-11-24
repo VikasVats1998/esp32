@@ -34,7 +34,17 @@ button{background:#2a6fd0;color:#fff;cursor:pointer} button.g{background:#2f3b52
 <div class="row"><button class="g" onclick="post('/api/motion?avoid=1')">Avoid mode on</button>
 <button class="g" onclick="post('/api/motion?avoid=0')">off</button></div></section>
 
-<section><h2>Feelings (face + body + voice)</h2><div class="row" id="emotes"></div></section>
+<section><h2>Feelings (face + body + voice)</h2><div class="row" id="moods"></div>
+<h2 style="margin-top:10px">Body moves only</h2><div class="row" id="emotes"></div></section>
+
+<section><h2>Screen</h2>
+<div class="row"><select id="scr" style="width:auto"></select><button class="g" onclick="post('/api/screen?name='+scr.value)">Show</button></div>
+<label>Rotation (degrees, the round screen can sit at any angle)</label>
+<div class="row"><input id="rot" type="number" min="0" max="359"><button class="g" onclick="post('/api/rotation?deg='+rot.value)">Try</button>
+<button onclick="post('/api/rotation?save=1&deg='+rot.value)">Save</button></div>
+<div class="small">On Chiku: Settings, Screen orientation, Auto measures it with the IMU.</div>
+<div class="row"><input id="ntitle" value="Doorbell" style="width:120px"><input id="ntext" value="Someone is at the door" style="width:200px">
+<button class="g" onclick="post('/api/notify?mood=surprised&title='+encodeURIComponent(ntitle.value)+'&text='+encodeURIComponent(ntext.value))">Notify</button></div></section>
 
 <section><h2>Voice</h2><div class="row" id="say"></div>
 <div class="small">Clips are 16 kHz 16-bit WAV files named like the buttons. Upload your own to replace one (same name):</div>
@@ -56,16 +66,18 @@ button{background:#2a6fd0;color:#fff;cursor:pointer} button.g{background:#2f3b52
 
 <script>
 const $=id=>document.getElementById(id);
-const NAMES=['Left hip','Right hip','Left ankle','Right ankle','Head pan'];
+const NAMES=['Left hip','Right hip','Left foot','Right foot','Neck'];
 const MOVES=['home','walk','back','left','right','bend','shakeleg','moonwalk','dance','jump','wiggle'];
-const EMOTES=['happy','excited','angry','scared','sulk','jealous','shy','love','sad','surprised','tiltl','tiltr'];
+const MOODS=['normal','happy','sad','sleepy','angry','surprised','dizzy','love','thinking','listening','jealous','sulk','shy','excited','scared','cry','curious','confused','bored','wink','error','speaking'];
+const EMOTES=['happy','excited','angry','scared','sulk','jealous','shy','love','sad','surprised','tiltl','tiltr','sleepy','curious','confused','bored','dizzy','wink','thinking','listen','speak'];
+const SCREENS=['face','clock','weather','timer','menu','alarms','moves','sensors','sonar','camera','network','games','desk','settings','calibration','orientation','power','ringing','notify','setup'];
 const SAY=['hello','happy','excited','shy','love','surprised','angry','sulk','scared','sad','jealous','alarm','timer','goodmorning'];
 const DAYS=['Mo','Tu','We','Th','Fr','Sa','Su'];
 let S=null;
 async function post(u,b){await fetch(u,{method:'POST',body:b?JSON.stringify(b):undefined});load(false)}
 async function load(full=true){
   S=await (await fetch('/api/state')).json();
-  $('st').textContent=S.ip+'  batt '+S.batt+'%  dist '+S.dist+' cm';
+  $('st').textContent=S.ip+'  batt '+S.batt+'%  dist '+S.dist+' cm  mic '+S.mic+' dB  screen '+S.screenName;
   if(full){
     $('bri').value=S.brightness;$('vol').value=S.volume;$('lat').value=S.lat;$('lon').value=S.lon;
     $('alarms').innerHTML=S.alarms.map((a,i)=>`<div class="row"><input type="checkbox" id="a${i}on" ${a.on?'checked':''} style="width:auto">
@@ -74,6 +86,9 @@ async function load(full=true){
     $('servos').innerHTML=S.servo.map((s,i)=>`<div class="row"><b style="width:100px">${NAMES[i]}</b>
       trim<input id="s${i}t" type="number" value="${s.trim}"> min<input id="s${i}a" type="number" value="${s.min}"> max<input id="s${i}b" type="number" value="${s.max}">
       inv<input id="s${i}i" type="checkbox" ${s.inv?'checked':''} style="width:auto"><button class="g" onclick="testServo(${i})">Test</button></div>`).join('');
+    $('moods').innerHTML=MOODS.map(m=>`<button class="g" onclick="post('/api/mood?move=1&name=${m}')">${m}</button>`).join('');
+    $('scr').innerHTML=SCREENS.map(n=>`<option>${n}</option>`).join('');
+    $('rot').value=S.rotation;
     $('emotes').innerHTML=EMOTES.map(m=>`<button class="g" onclick="post('/api/motion?g=${m}&n=3')">${m}</button>`).join('');
     $('say').innerHTML=SAY.map(m=>`<button class="g" onclick="post('/api/say?key=${m}')">${m}</button>`).join('');
     $('moves').innerHTML=MOVES.map(m=>`<button class="g" onclick="post('/api/motion?g=${m}&n=4')">${m}</button>`).join('');

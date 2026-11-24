@@ -1,2 +1,4 @@
 .pio/
 .vscode/
+tools/uisim/build/
+tools/uisim/out/

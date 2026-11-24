@@ -2,6 +2,7 @@
 #include "ui.h"
 #include "config.h"
 #include "ui_screens.h"
+#include "ui_common.h"
 #include "face.h"
 #include "display.h"
 #include "touch.h"
@@ -11,18 +12,66 @@
 
 namespace ui {
 
+// Face is not a ui_* module: small wrappers so it fits the table.
+static lv_obj_t* faceCreate(lv_obj_t* p) { return face::create(p); }
+static void faceUpdate(uint32_t dt) { face::update(dt); }
+static void none() {}
+
+struct Def {
+  const char* name;
+  lv_obj_t* (*create)(lv_obj_t*);
+  void (*update)(uint32_t);
+  void (*onShow)();
+  void (*onHide)();
+  Screen back;                     // where "back" (swipe down / right) goes
+  touch::GestureMode gestures;
+};
+#define SCR(name, ns, back, g) {name, ns::create, ns::update, ns::onShow, ns::onHide, back, touch::g}
+static const Def DEFS[S_COUNT] = {
+  {"face", faceCreate, faceUpdate, none, none, S_FACE, touch::G_ALL},
+  SCR("clock",       ui_clock,     S_FACE,     G_ALL),
+  SCR("weather",     ui_weather,   S_FACE,     G_ALL),
+  SCR("timer",       ui_timer,     S_FACE,     G_ALL),
+  SCR("menu",        ui_menu,      S_FACE,     G_ALL),
+  SCR("alarms",      ui_alarms,    S_MENU,     G_HORIZONTAL),
+  SCR("moves",       ui_moves,     S_MENU,     G_HORIZONTAL),
+  SCR("sensors",     ui_sensors,   S_MENU,     G_ALL),
+  SCR("sonar",       ui_sonar,     S_SENSORS,  G_ALL),
+  SCR("camera",      ui_camera,    S_SENSORS,  G_ALL),
+  SCR("network",     ui_network,   S_SENSORS,  G_ALL),
+  SCR("games",       ui_games,     S_MENU,     G_ALL),
+  SCR("desk",        ui_desk,      S_MENU,     G_NONE),
+  SCR("settings",    ui_settings,  S_MENU,     G_HORIZONTAL),
+  SCR("calibration", ui_calib,     S_SETTINGS, G_NONE),
+  SCR("orientation", ui_orient,    S_SETTINGS, G_NONE),
+  SCR("power",       ui_power,     S_FACE,     G_ALL),
+  SCR("goodnight",   ui_goodnight, S_FACE,     G_NONE),
+  SCR("ringing",     ui_ringing,   S_FACE,     G_NONE),
+  SCR("notify",      ui_notify,    S_FACE,     G_ALL),
+  SCR("boot",        ui_boot,      S_FACE,     G_NONE),
+  SCR("setup",       ui_setup,     S_FACE,     G_NONE),
+};
+
 static lv_obj_t* screens[S_COUNT];
-static Screen cur = S_FACE;
+static Screen cur = S_BOOT;
 static lv_obj_t* testObj = nullptr;       // full-screen colour for display tests
 static volatile int reqPattern = 0;
+static volatile int reqRot = -1;
 static int shownPattern = 0;
-static lv_obj_t* ring = nullptr;          // timer progress ring on the top layer
-static uint32_t slowAcc = 0;              // for the 4 Hz screen updates
+static lv_obj_t* timerRing = nullptr;     // timer progress ring on the top layer
+static lv_obj_t* holdRing = nullptr;      // fills while the finger rests (power menu)
+static lv_obj_t* toastChip = nullptr;
+static uint32_t toastLeft = 0, slowAcc = 0;
 static bool demoOn = false;
 static uint32_t demoAcc = 0;
 static uint8_t demoIdx = 0;
 
 Screen current() { return cur; }
+const char* screenName(Screen s) { return s < S_COUNT ? DEFS[s].name : "?"; }
+bool screenFromName(const char* n, Screen& out) {
+  for (int i = 0; i < S_COUNT; i++) if (!strcmp(n, DEFS[i].name)) { out = (Screen)i; return true; }
+  return false;
+}
 
 void applyBrightness() {
   uint8_t b = storage::get().brightness;
@@ -34,56 +83,50 @@ void applyBrightness() {
 }
 
 void show(Screen s) {
-  if (s >= S_COUNT) return;
-  if (cur == S_CALIB && s != S_CALIB) ui_calib::onHide();
-  for (int i = 0; i < S_COUNT; i++) {
-    if (i == s) lv_obj_remove_flag(screens[i], LV_OBJ_FLAG_HIDDEN);
-    else lv_obj_add_flag(screens[i], LV_OBJ_FLAG_HIDDEN);
-  }
+  if (s >= S_COUNT || s == cur) return;
+  DEFS[cur].onHide();
+  for (int i = 0; i < S_COUNT; i++) uic::show(screens[i], i == s);
   cur = s;
-  touch::setGestures(s != S_MENU && s != S_CALIB && s != S_DESK);
-  if (s == S_MENU) ui_menu::onShow();
-  if (s == S_CALIB) ui_calib::onShow();
-  if (s != S_FACE) demoOn = false;
-  slowAcc = 1000;                          // refresh the new screen at once
+  touch::setGestures(DEFS[s].gestures);
+  if (s != S_FACE && demoOn) { demoOn = false; face::setCaption(false); }
+  DEFS[s].onShow();
+  slowAcc = 1000;
+}
+
+void back() { show(DEFS[cur].back); }
+
+void toast(const char* text) {
+  uic::setText(uic::chipLabel(toastChip), text);
+  uic::show(toastChip, true);
+  toastLeft = 2500;
 }
 
 void init() {
   lv_obj_t* root = lv_screen_active();
   lv_obj_remove_flag(root, LV_OBJ_FLAG_SCROLLABLE);
-  screens[S_FACE] = face::create(root);
-  screens[S_CLOCK] = ui_clock::create(root);
-  screens[S_WEATHER] = ui_weather::create(root);
-  screens[S_TIMER] = ui_timer::create(root);
-  screens[S_SONAR] = ui_sonar::create(root);
-  screens[S_CAMERA] = ui_camera::create(root);
-  screens[S_SETTINGS] = ui_settings::create(root);
-  screens[S_MENU] = ui_menu::create(root);
-  screens[S_CALIB] = ui_calib::create(root);
-  screens[S_DESK] = ui_desk::create(root);
-
-  ring = lv_arc_create(lv_layer_top());
-  lv_obj_set_size(ring, LCD_W, LCD_H);
-  lv_obj_center(ring);
-  lv_obj_remove_style(ring, nullptr, LV_PART_KNOB);
-  lv_obj_remove_flag(ring, LV_OBJ_FLAG_CLICKABLE);
-  lv_obj_set_style_arc_opa(ring, LV_OPA_TRANSP, LV_PART_MAIN);
-  lv_obj_set_style_arc_width(ring, 8, LV_PART_INDICATOR);
-  lv_obj_set_style_arc_color(ring, lv_color_hex(0xFFA020), LV_PART_INDICATOR);
-  lv_arc_set_rotation(ring, 270);
-  lv_arc_set_bg_angles(ring, 0, 360);
-  lv_arc_set_range(ring, 0, 1000);
-  lv_obj_add_flag(ring, LV_OBJ_FLAG_HIDDEN);
-  testObj = lv_obj_create(lv_layer_top());
-  lv_obj_remove_style_all(testObj);
+  for (int i = 0; i < S_COUNT; i++) {
+    screens[i] = DEFS[i].create(root);
+    lv_obj_add_flag(screens[i], LV_OBJ_FLAG_HIDDEN);
+  }
+  timerRing = uic::ring(lv_layer_top(), LCD_W - 6, 6, uic::C_ORANGE, 0x000000);
+  lv_obj_set_style_arc_opa(timerRing, LV_OPA_TRANSP, LV_PART_MAIN);
+  lv_obj_add_flag(timerRing, LV_OBJ_FLAG_HIDDEN);
+  holdRing = uic::ring(lv_layer_top(), LCD_W - 24, 10, uic::C_RED, 0x000000);
+  lv_obj_set_style_arc_opa(holdRing, LV_OPA_TRANSP, LV_PART_MAIN);
+  lv_obj_add_flag(holdRing, LV_OBJ_FLAG_HIDDEN);
+  toastChip = uic::chip(lv_layer_top(), "", 372, uic::C_TEXT, uic::C_CARD_HI, &inter_16);
+  lv_obj_add_flag(toastChip, LV_OBJ_FLAG_HIDDEN);
+  testObj = uic::plain(lv_layer_top());
   lv_obj_set_size(testObj, LCD_W, LCD_H);
   lv_obj_set_style_bg_opa(testObj, LV_OPA_COVER, 0);
-  lv_obj_remove_flag(testObj, LV_OBJ_FLAG_CLICKABLE);
   lv_obj_add_flag(testObj, LV_OBJ_FLAG_HIDDEN);
-  show(S_FACE);
+  display::setRotation(storage::get().screenRot);
+  cur = S_FACE;                 // anything but S_BOOT, so show() runs
+  show(S_BOOT);
 }
 
 void setTestPattern(int p) { reqPattern = p; }
+void requestRotation(int deg) { reqRot = deg; }
 
 static void applyPattern() {
   int p = reqPattern;
@@ -99,60 +142,72 @@ static void applyPattern() {
   lv_obj_remove_flag(testObj, LV_OBJ_FLAG_HIDDEN);
 }
 
-void startMoodDemo() { demoOn = true; demoIdx = 0; demoAcc = 0; face::setMood(face::M_NORMAL, 0); }
+void startMoodDemo() {
+  show(S_FACE);
+  demoOn = true; demoIdx = 0; demoAcc = 1800;
+  face::setCaption(true);
+}
 
-static void updateRing() {
+static void updateRings() {
   int slot = alarm_timer::activeTimer();
-  if (slot < 0) { lv_obj_add_flag(ring, LV_OBJ_FLAG_HIDDEN); return; }
-  uint32_t total = alarm_timer::timerTotalMs(slot);
-  uint32_t left = alarm_timer::timerRemainingMs(slot);
-  lv_arc_set_value(ring, total ? (int)(1000UL * left / total) : 0);   // shrinks as time runs out
-  lv_obj_remove_flag(ring, LV_OBJ_FLAG_HIDDEN);
+  bool ringOk = cur != S_TIMER && cur != S_RINGING && cur != S_BOOT && cur != S_GOODNIGHT && cur != S_SETUP;
+  if (slot < 0 || !ringOk) lv_obj_add_flag(timerRing, LV_OBJ_FLAG_HIDDEN);
+  else {
+    uint32_t total = alarm_timer::timerTotalMs(slot), left = alarm_timer::timerRemainingMs(slot);
+    uic::setRing(timerRing, total ? (int)(1000ULL * left / total) : 0);     // shrinks as time runs out
+    lv_obj_remove_flag(timerRing, LV_OBJ_FLAG_HIDDEN);
+  }
 }
 
 void update(uint32_t dtMs) {
   applyPattern();
-  if (cur == S_FACE) face::update(dtMs);
-  slowAcc += dtMs;
-  if (slowAcc >= 250) {
-    slowAcc = 0;
-    switch (cur) {
-      case S_CLOCK: ui_clock::update(); break;
-      case S_WEATHER: ui_weather::update(); break;
-      case S_TIMER: ui_timer::update(); break;
-      case S_SONAR: ui_sonar::update(); break;
-      case S_CAMERA: ui_camera::update(); break;
-      case S_SETTINGS: ui_settings::update(); break;
-      case S_DESK: ui_desk::update(); break;
-      default: break;
-    }
-    static uint8_t ringDiv = 0;
-    if (++ringDiv >= 4) { ringDiv = 0; updateRing(); }
+  if (reqRot >= 0) { display::setRotation(reqRot); reqRot = -1; }
+  DEFS[cur].update(dtMs);
+  // hold to open the power menu: show progress after a short moment
+  uint32_t h = (cur == S_FACE) ? touch::holdMs() : 0;
+  if (h > 600) {
+    uic::setRing(holdRing, (int)min<uint32_t>(1000, (h - 600) * 1000 / (POWER_MENU_HOLD_MS - 600)));
+    lv_obj_remove_flag(holdRing, LV_OBJ_FLAG_HIDDEN);
+  } else if (!lv_obj_has_flag(holdRing, LV_OBJ_FLAG_HIDDEN)) lv_obj_add_flag(holdRing, LV_OBJ_FLAG_HIDDEN);
+  if (toastLeft) {
+    toastLeft = toastLeft > dtMs ? toastLeft - dtMs : 0;
+    if (!toastLeft) lv_obj_add_flag(toastChip, LV_OBJ_FLAG_HIDDEN);
   }
+  slowAcc += dtMs;
+  if (slowAcc >= 1000) { slowAcc = 0; updateRings(); }
   if (demoOn) {
     demoAcc += dtMs;
     if (demoAcc > 1800) {
       demoAcc = 0;
-      face::setMood((face::Mood)demoIdx, 1700);
-      if (++demoIdx >= face::MOOD_COUNT) demoOn = false;
+      if (demoIdx >= face::MOOD_COUNT) { demoOn = false; face::setCaption(false); face::setMood(face::M_NORMAL, 0); }
+      else face::setMood((face::Mood)demoIdx++, 1700);
     }
   }
 }
 
 void onEvent(const events::Event& e) {
+  bool carousel = cur <= S_TIMER;
   switch (e.type) {
     case events::EV_SWIPE:
-      if (cur <= S_SETTINGS) {
-        int next = ((int)cur - e.a + S_SETTINGS + 1) % (S_SETTINGS + 1);   // swipe left (-1) = next
-        show((Screen)next);
-      }
+      if (e.a != 0) {                                   // left / right
+        if (carousel) show((Screen)(((int)cur - e.a + 4) % 4));   // swipe left (-1) = next
+        else if (DEFS[cur].gestures == touch::G_HORIZONTAL && e.a > 0) back();
+      } else if (e.b < 0) {                             // up
+        if (carousel) show(S_MENU);
+      } else if (cur != S_FACE) back();                 // down
       break;
     case events::EV_TOUCH_LONG:
-      if (cur != S_MENU && cur != S_CALIB && cur != S_DESK) show(S_MENU);
+      if (cur == S_FACE) show(S_POWER);
       break;
     case events::EV_SCREEN: show((Screen)e.a); break;
-    case events::EV_SETTINGS:
-    case events::EV_POWER: applyBrightness(); break;
+    case events::EV_ALARM_RING: if (cur != S_SETUP && cur != S_BOOT) show(S_RINGING); break;
+    case events::EV_ALARM_STOP: if (cur == S_RINGING) show(S_FACE); break;
+    case events::EV_NOTIFY: if (cur != S_SETUP && cur != S_BOOT && cur != S_RINGING) show(S_NOTIFY); break;
+    case events::EV_POWER:
+      if (e.a == power::SLEEP && cur != S_RINGING && cur != S_SETUP && cur != S_GOODNIGHT) show(S_FACE);
+      applyBrightness();
+      break;
+    case events::EV_SETTINGS: applyBrightness(); break;
     default: break;
   }
 }

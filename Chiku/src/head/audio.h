@@ -17,6 +17,9 @@ void setVolume(uint8_t percent);               // 0..100
 void setMuted(bool on);                        // true: nothing is played (queue is cleared)
 bool muted();
 bool playing();
+float speechLevel();                           // 0..1 while a voice clip / babble plays, -1 = not talking
+// Microphones (ES7210 on the same I2S bus, see mic.h). Reads stereo frames; blocks up to the I2S timeout.
+size_t micRead(int16_t* buf, size_t frames);
 
 // ---- Speech ----
 // Chiku talks in two ways:

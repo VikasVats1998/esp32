@@ -16,6 +16,7 @@ static void setDefaults() {
   S.lon = WEATHER_LON_DEFAULT;
   S.brightness = BRIGHTNESS_DEFAULT;
   S.volume = 60;
+  S.screenRot = ROTATION_DEFAULT;
   const uint8_t inv[SERVO_COUNT] = SERVO_INVERT_DEFAULT;
   for (int i = 0; i < SERVO_COUNT; i++) {
     S.servo[i] = {0, 10, 170, (bool)inv[i]};
@@ -35,6 +36,8 @@ void init() {
   S.brightness = prefs.getUChar("bri", S.brightness);
   S.volume = prefs.getUChar("vol", S.volume);
   S.servoCalibrated = prefs.getBool("cal", false);
+  S.setupDone = prefs.getBool("setup", false);
+  S.screenRot = prefs.getShort("rot", S.screenRot);
   if (prefs.getBytesLength("alarms") == sizeof(S.alarms)) prefs.getBytes("alarms", S.alarms, sizeof(S.alarms));
   if (prefs.getBytesLength("servo") == sizeof(S.servo)) prefs.getBytes("servo", S.servo, sizeof(S.servo));
 }
@@ -50,6 +53,8 @@ void save() {
   prefs.putUChar("bri", S.brightness);
   prefs.putUChar("vol", S.volume);
   prefs.putBool("cal", S.servoCalibrated);
+  prefs.putBool("setup", S.setupDone);
+  prefs.putShort("rot", S.screenRot);
   prefs.putBytes("alarms", S.alarms, sizeof(S.alarms));
   prefs.putBytes("servo", S.servo, sizeof(S.servo));
 }

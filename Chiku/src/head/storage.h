@@ -29,6 +29,8 @@ struct Settings {
   AlarmCfg alarms[MAX_ALARMS];
   ServoCfg servo[SERVO_COUNT];
   bool servoCalibrated;
+  bool setupDone;          // first-time setup finished (welcome, Wi-Fi, screen, servos, mic)
+  int16_t screenRot;       // screen rotation 0..359 deg (round panel can sit at any angle)
 };
 
 namespace storage {

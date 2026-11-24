@@ -1,72 +1,81 @@
-// ui_sonar.cpp - radar style distance screen. Forward = up. The sweep is
-// cosmetic; the blip shows the real distance at the current head pan angle.
+// ui_sonar.cpp - ultrasonic radar (UI kit): a cone that looks forward (up), range arcs, an orange
+// blip at the measured distance (turned by the neck angle), big distance, explore-mode switch.
 #include "ui_screens.h"
 #include "ui_common.h"
 #include "sonar.h"
-#include "motion.h"
 #include "servo.h"
+#include "behavior.h"
 #include <math.h>
 
 namespace ui_sonar {
-static lv_obj_t *sweep, *blip, *lDist, *bAvoid;
-static float angle = 0;
+static lv_obj_t *root, *lDist, *bExplore;
+static int shownCm = -2;
+static const float AX = 233, AY = 250, RANGE = 190;   // apex of the cone, radius for 200 cm
 
-static void onAvoid(lv_event_t*) {
-  motion::setAvoidMode(!motion::avoidMode());
-  uic::setButtonText(bAvoid, motion::avoidMode() ? "Avoid: ON" : "Avoid: OFF");
+static void onExplore(lv_event_t*) {
+  behavior::setMode(behavior::mode() == behavior::MODE_EXPLORE ? behavior::MODE_AUTO : behavior::MODE_EXPLORE);
+}
+
+static void drawRadar(lv_event_t* e) {
+  lv_layer_t* layer = lv_event_get_layer(e);
+  // cone: 3 slices from dark teal (edge) to brighter (centre)
+  static const uint32_t COL[3] = {0x0B3A40, 0x0E4F57, 0x12666F};
+  for (int s = 0; s < 3; s++) {
+    float half = (40 - s * 12) * DEG_TO_RAD;
+    lv_draw_triangle_dsc_t d;
+    lv_draw_triangle_dsc_init(&d);
+    d.bg_color = lv_color_hex(COL[s]);
+    d.p[0] = {(int32_t)AX, (int32_t)AY};
+    d.p[1] = {(int32_t)(AX - RANGE * sinf(half)), (int32_t)(AY - RANGE * cosf(half))};
+    d.p[2] = {(int32_t)(AX + RANGE * sinf(half)), (int32_t)(AY - RANGE * cosf(half))};
+    lv_draw_triangle(layer, &d);
+  }
+  lv_draw_arc_dsc_t a;
+  lv_draw_arc_dsc_init(&a);
+  a.color = lv_color_hex(0x1F5F66);
+  a.width = 2;
+  a.center = {(int32_t)AX, (int32_t)AY};
+  for (int r = 1; r <= 3; r++) {
+    a.radius = (uint16_t)(RANGE * r / 3);
+    a.start_angle = 230; a.end_angle = 310;
+    lv_draw_arc(layer, &a);
+  }
+  if (shownCm >= 0) {
+    float r = fminf(shownCm, 200) / 200.f * RANGE;
+    float ang = (servo::current(SERVO_HEAD_PAN) - 90.f) * DEG_TO_RAD;
+    lv_draw_rect_dsc_t b;
+    lv_draw_rect_dsc_init(&b);
+    b.bg_color = lv_color_hex(shownCm < 15 ? uic::C_RED : uic::C_ORANGE);
+    b.radius = LV_RADIUS_CIRCLE;
+    b.shadow_width = 14; b.shadow_color = b.bg_color; b.shadow_opa = 160;
+    int x = (int)(AX + r * sinf(ang)), y = (int)(AY - r * cosf(ang));
+    lv_area_t ar = {x - 8, y - 8, x + 8, y + 8};
+    lv_draw_rect(layer, &b, &ar);
+  }
 }
 
 lv_obj_t* create(lv_obj_t* parent) {
-  lv_obj_t* p = uic::panel(parent);
-  for (int r = 60; r <= 200; r += 70) {                       // range rings
-    lv_obj_t* c = lv_obj_create(p);
-    lv_obj_remove_style_all(c);
-    lv_obj_set_size(c, r * 2, r * 2);
-    lv_obj_center(c);
-    lv_obj_set_style_radius(c, LV_RADIUS_CIRCLE, 0);
-    lv_obj_set_style_border_width(c, 1, 0);
-    lv_obj_set_style_border_color(c, lv_color_hex(0x105020), 0);
-    lv_obj_remove_flag(c, LV_OBJ_FLAG_CLICKABLE);
-  }
-  sweep = lv_arc_create(p);
-  lv_obj_set_size(sweep, 400, 400);
-  lv_obj_center(sweep);
-  lv_obj_remove_style(sweep, nullptr, LV_PART_KNOB);
-  lv_obj_remove_flag(sweep, LV_OBJ_FLAG_CLICKABLE);
-  lv_obj_set_style_arc_opa(sweep, LV_OPA_TRANSP, LV_PART_MAIN);
-  lv_obj_set_style_arc_width(sweep, 200, LV_PART_INDICATOR);
-  lv_obj_set_style_arc_color(sweep, lv_color_hex(0x0C5A20), LV_PART_INDICATOR);
-  lv_obj_set_style_arc_opa(sweep, LV_OPA_50, LV_PART_INDICATOR);
-  lv_arc_set_bg_angles(sweep, 0, 360);
-  lv_arc_set_angles(sweep, 0, 25);
-  blip = lv_obj_create(p);
-  lv_obj_remove_style_all(blip);
-  lv_obj_set_size(blip, 16, 16);
-  lv_obj_set_style_radius(blip, LV_RADIUS_CIRCLE, 0);
-  lv_obj_set_style_bg_color(blip, lv_color_hex(0xFF4040), 0);
-  lv_obj_set_style_bg_opa(blip, LV_OPA_COVER, 0);
-  lv_obj_add_flag(blip, LV_OBJ_FLAG_HIDDEN);
-  lDist = uic::label(p, &lv_font_montserrat_28, 0x40FF70, "-- cm", 330);
-  bAvoid = uic::button(p, "Avoid: OFF", 163, 380, 140, 40, onAvoid);
-  return p;
+  root = uic::panel(parent);
+  lv_obj_add_event_cb(root, drawRadar, LV_EVENT_DRAW_MAIN_END, nullptr);
+  lDist = uic::label(root, &inter_44, uic::C_TEXT, "--", 262);
+  uic::label(root, &inter_14, uic::C_MUTED, "HC-SR04P on the ESP32-CAM", 318);
+  uic::chip(root, "< 15 cm \xE2\x86\x92 scared + back up", 342, uic::C_ORANGE, 0x2A1E0C);
+  bExplore = uic::button(root, "Explore: off", 163, 380, 140, 34, onExplore, nullptr, 0x2A3038, uic::C_TEXT, &inter_14);
+  return root;
 }
 
-void update() {
-  angle = fmodf(angle + 14, 360);
-  lv_arc_set_rotation(sweep, (int)angle);
+void update(uint32_t) {
   int cm = sonar::distanceCm();
-  char buf[24];
-  if (cm < 0) {
-    uic::setText(lDist, "-- cm");
-    lv_obj_add_flag(blip, LV_OBJ_FLAG_HIDDEN);
-    return;
+  if (cm != shownCm) {
+    shownCm = cm;
+    char buf[24];
+    if (cm >= 0) snprintf(buf, sizeof(buf), "%d cm", cm); else strlcpy(buf, "-- cm", sizeof(buf));
+    uic::setText(lDist, buf);
+    lv_area_t a = {(int32_t)(AX - RANGE - 10), (int32_t)(AY - RANGE - 10), (int32_t)(AX + RANGE + 10), (int32_t)AY + 10};
+    lv_obj_invalidate_area(root, &a);
   }
-  snprintf(buf, sizeof(buf), "%d cm", cm);
-  uic::setText(lDist, buf);
-  float r = fminf((float)cm, 200.f);
-  float a = (servo::current(SERVO_HEAD_PAN) - 90.f) * DEG_TO_RAD;
-  lv_obj_set_pos(blip, (int)(LCD_W / 2 + r * sinf(a) - 8), (int)(LCD_H / 2 - r * cosf(a) - 8));
-  lv_obj_set_style_bg_color(blip, lv_color_hex(cm < 15 ? 0xFF4040 : 0xFFD040), 0);
-  lv_obj_remove_flag(blip, LV_OBJ_FLAG_HIDDEN);
+  uic::setButtonText(bExplore, behavior::mode() == behavior::MODE_EXPLORE ? "Explore: ON" : "Explore: off");
 }
+void onShow() { shownCm = -2; }
+void onHide() {}
 }  // namespace ui_sonar

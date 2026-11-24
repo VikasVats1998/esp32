@@ -19,6 +19,7 @@ static volatile bool loopFlag = false;
 static volatile Melody loopMelody = MEL_ALARM;
 static volatile bool busy = false;
 static volatile uint8_t volume = 60;
+static volatile float speech = -1;        // voice level 0..1 while talking, -1 = silent
 
 struct Note { uint16_t hz; uint16_t ms; uint16_t hz2 = 0; uint8_t voice = 0; };   // hz2 != 0: glide hz -> hz2
 
@@ -91,6 +92,11 @@ void setMuted(bool on) { LOGI("audio", "mute %s", on ? "on" : "off"); mutedFlag 
 bool muted() { return mutedFlag; }
 void setVolume(uint8_t p) { volume = constrain(p, 0, 100); }
 bool online() { return ok; }
+float speechLevel() { return speech; }
+size_t micRead(int16_t* buf, size_t frames) {          // stereo frames: mic 1 left, mic 2 right
+  if (!ok) return 0;
+  return i2s.readBytes((char*)buf, frames * 4) / 4;
+}
 bool playing() { return busy || (noteQ && uxQueueMessagesWaiting(noteQ) > 0); }
 
 void beep(uint16_t hz, uint16_t ms) {
@@ -134,6 +140,7 @@ static void playNote(const Note& n) {
       if (phase > 2.f * PI) phase -= 2.f * PI;
       buf[2 * i] = s; buf[2 * i + 1] = s;
     }
+    if (n.voice) speech = n.hz ? 0.55f + 0.45f * sinf(PI * done / total) : 0.f;   // for the talking mouth
     i2s.write((uint8_t*)buf, chunk * 4);
     done += chunk;
   }
@@ -161,7 +168,7 @@ void babble(Babble style, uint8_t n) {
     }
     s.hz = (uint16_t)f;
     xQueueSend(noteQ, &s, 0);
-    Note gap = {0, 35};
+    Note gap = {0, 35, 0, 1};                              // "voice" silence: mouth closes between syllables
     xQueueSend(noteQ, &gap, 0);
   }
 }
@@ -205,11 +212,14 @@ static void playWavFile(const char* path) {
     int n = f.read((uint8_t*)in, sizeof(in)) / 2;           // samples
     if (n <= 0) break;
     int frames = n / channels;
+    float sum = 0;
     for (int i = 0; i < frames; i++) {
       int16_t l = (int16_t)constrain(in[i * channels] * gain, -32768.f, 32767.f);
       int16_t r = channels == 2 ? (int16_t)constrain(in[i * 2 + 1] * gain, -32768.f, 32767.f) : l;
       out[2 * i] = l; out[2 * i + 1] = r;
+      sum += (float)in[i * channels] * in[i * channels];
     }
+    speech = fminf(1.f, sqrtf(sum / (frames ? frames : 1)) / 6000.f);   // loudness of the clip -> mouth size
     i2s.write((uint8_t*)out, frames * 4);
   }
   f.close();
@@ -226,12 +236,14 @@ static void audioTask(void*) {
       if (!paOn) { digitalWrite(PIN_PA_CTRL, HIGH); paOn = true; delay(20); }
       busy = true;
       playWavFile(wavPath);
+      speech = -1;
       silentSince = millis();
     }
     if (xQueueReceive(noteQ, &n, pdMS_TO_TICKS(20)) == pdTRUE) {
       if (!paOn) { digitalWrite(PIN_PA_CTRL, HIGH); paOn = true; delay(20); }
       busy = true;
       playNote(n);
+      if (!n.voice || uxQueueMessagesWaiting(noteQ) == 0) speech = -1;
       if (loopFlag && uxQueueMessagesWaiting(noteQ) == 0) {   // repeat the melody
         const Tune& t = TUNES[loopMelody];
         for (uint8_t i = 0; i < t.count; i++) xQueueSend(noteQ, &t.n[i], 0);

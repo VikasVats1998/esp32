@@ -1,58 +1,34 @@
-// ui_menu.cpp - long-press menu: pick a gait, mood demo, avoid mode, calibration...
+// ui_menu.cpp - radial menu (UI kit, swipe up from the face): 8 coloured rings around "Menu".
+// Tap a ring to open it, tap "Menu" or swipe down to go back to the face.
 #include "ui_screens.h"
 #include "ui_common.h"
 #include "ui.h"
-#include "events.h"
-#include "motion.h"
-#include "face.h"
-#include "net.h"
-#include "storage.h"
-#include "touch.h"
+#include <math.h>
 
 namespace ui_menu {
-static lv_obj_t* roller;
-// Roller text = every gait name (index = gait id) followed by the extra actions.
-static char options[640];
-static const char* EXTRA[] = {"Avoid mode on", "Avoid mode off", "Mood demo", "Calibrate servos", "Wi-Fi reset", "Reboot", "Desk control"};
+struct Item { const char* text; uint32_t color; ui::Screen screen; };
+static const Item ITEMS[8] = {             // clockwise from the top
+  {"Desk", uic::C_GREEN, ui::S_DESK},      {"Alarms", uic::C_CYAN, ui::S_ALARMS},
+  {"Timer", uic::C_ORANGE, ui::S_TIMER},   {"Sensors", uic::C_PINK, ui::S_SENSORS},
+  {"Games", uic::C_YELLOW, ui::S_GAMES},   {"Moves", uic::C_PURPLE, ui::S_MOVES},
+  {"Settings", uic::C_GREY, ui::S_SETTINGS}, {"Power", uic::C_RED, ui::S_POWER},
+};
 
-static void onOk(lv_event_t*) {
-  uint32_t i = lv_roller_get_selected(roller);
-  if (i < motion::G_COUNT) {
-    ui::show(ui::S_FACE);
-    events::publish(events::EV_MOTION_CMD, i, 4);
-    return;
-  }
-  switch (i - motion::G_COUNT) {
-    case 0: ui::show(ui::S_FACE); motion::setAvoidMode(true); break;
-    case 1: motion::setAvoidMode(false); break;
-    case 2: ui::show(ui::S_FACE); ui::startMoodDemo(); break;
-    case 3: ui::show(ui::S_CALIB); break;
-    case 4: storage::clearWifi(); net::restartWifi(); ui::show(ui::S_FACE); break;
-    case 5: ESP.restart(); break;
-    case 6: ui::show(ui::S_DESK); break;
-  }
-}
-static void onClose(lv_event_t*) { ui::show(ui::S_FACE); }
+static void onItem(lv_event_t* e) { ui::show(((const Item*)lv_event_get_user_data(e))->screen); }
+static void onCentre(lv_event_t*) { ui::show(ui::S_FACE); }
 
 lv_obj_t* create(lv_obj_t* parent) {
   lv_obj_t* p = uic::panel(parent);
-  uic::label(p, &lv_font_montserrat_20, 0xFFFFFF, "Menu", 40);
-  roller = lv_roller_create(p);
-  options[0] = 0;
-  for (int g = 0; g < motion::G_COUNT; g++) { strlcat(options, motion::gaitName((motion::Gait)g), sizeof(options)); strlcat(options, "\n", sizeof(options)); }
-  for (int k = 0; k < 7; k++) { strlcat(options, EXTRA[k], sizeof(options)); if (k < 6) strlcat(options, "\n", sizeof(options)); }
-  lv_roller_set_options(roller, options, LV_ROLLER_MODE_NORMAL);
-  lv_roller_set_visible_row_count(roller, 5);
-  lv_obj_set_width(roller, 240);
-  lv_obj_align(roller, LV_ALIGN_TOP_MID, 0, 85);
-  lv_obj_set_style_bg_color(roller, lv_color_hex(0x182030), 0);
-  lv_obj_set_style_text_color(roller, lv_color_white(), 0);
-  lv_obj_set_style_bg_color(roller, lv_color_hex(0x2A5AA0), LV_PART_SELECTED);
-  lv_obj_set_style_border_width(roller, 0, 0);
-  uic::button(p, "OK", 98, 335, 120, 46, onOk, nullptr, 0x2A6A3A);
-  uic::button(p, "Close", 248, 335, 120, 46, onClose);
+  for (int i = 0; i < 8; i++) {
+    float a = (i * 45 - 90) * DEG_TO_RAD;
+    uic::circleButton(p, ITEMS[i].text, 233 + (int)(158 * cosf(a)), 233 + (int)(158 * sinf(a)), 80,
+                      ITEMS[i].color, onItem, (void*)&ITEMS[i]);
+  }
+  lv_obj_t* c = uic::button(p, "Menu", 173, 208, 120, 50, onCentre, nullptr, 0x000000, uic::C_TEXT, &inter_28);
+  (void)c;
   return p;
 }
-void update() {}
-void onShow() { touch::setGestures(false); }
+void update(uint32_t) {}
+void onShow() {}
+void onHide() {}
 }  // namespace ui_menu

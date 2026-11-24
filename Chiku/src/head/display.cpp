@@ -1,6 +1,7 @@
 // display.cpp - see display.h
 #include "display.h"
 #include "config.h"
+#include "rotate.h"
 #include <Arduino_GFX_Library.h>
 #include "esp_heap_caps.h"
 
@@ -10,25 +11,22 @@ static Arduino_DataBus* qspi = nullptr;
 static Arduino_CO5300* gfx = nullptr;
 static uint8_t curBrightness = 0;
 
-static const uint32_t BUF_LINES = 60;                 // lines per partial buffer
-static const uint32_t BUF_PIXELS = LCD_W * BUF_LINES;
+static uint16_t* frame = nullptr;                 // full logical frame, LVGL draws here
+static uint16_t* strip = nullptr;                 // panel lines on their way to the panel
+static const int STRIP_LINES = 24;                // even: keeps CO5300 even/odd alignment
+static rot::Turn turn = rot::make(0, LCD_W);
 
-// LVGL asks us to send a finished area to the panel.
-static void flushCb(lv_display_t* disp, const lv_area_t* area, uint8_t* px) {
-  uint32_t w = lv_area_get_width(area);
-  uint32_t h = lv_area_get_height(area);
-  gfx->draw16bitRGBBitmap(area->x1, area->y1, (uint16_t*)px, w, h);
+// LVGL finished an area of the frame: turn it and send the matching panel area.
+static void flushCb(lv_display_t* disp, const lv_area_t* area, uint8_t*) {
+  int x1, y1, x2, y2;
+  rot::panelArea(turn, LCD_W, area->x1, area->y1, area->x2, area->y2, x1, y1, x2, y2);
+  int w = x2 - x1 + 1;
+  for (int y = y1; y <= y2; y += STRIP_LINES) {
+    int n = min(STRIP_LINES, y2 - y + 1);
+    for (int r = 0; r < n; r++) rot::fillRow(turn, frame, LCD_W, y + r, x1, x2, strip + r * w);
+    gfx->draw16bitRGBBitmap(x1, y, strip, w, n);
+  }
   lv_display_flush_ready(disp);
-}
-
-// CO5300 needs even start / odd end coordinates. Called whenever LVGL
-// invalidates an area, so every later flush is already aligned.
-static void roundAreaCb(lv_event_t* e) {
-  lv_area_t* a = (lv_area_t*)lv_event_get_param(e);
-  a->x1 &= ~1;
-  a->y1 &= ~1;
-  a->x2 |= 1;
-  a->y2 |= 1;
 }
 
 bool init() {
@@ -42,17 +40,36 @@ bool init() {
   lv_init();
   lv_tick_set_cb([]() -> uint32_t { return millis(); });
 
-  uint8_t* b1 = (uint8_t*)heap_caps_malloc(BUF_PIXELS * 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-  uint8_t* b2 = (uint8_t*)heap_caps_malloc(BUF_PIXELS * 2, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
-  if (!b1 || !b2) return false;
+  size_t bytes = LCD_W * LCD_H * 2;
+  frame = (uint16_t*)heap_caps_malloc(bytes, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+  strip = (uint16_t*)heap_caps_malloc(LCD_W * STRIP_LINES * 2, MALLOC_CAP_INTERNAL | MALLOC_CAP_DMA);
+  if (!frame || !strip) return false;
+  memset(frame, 0, bytes);
 
   lv_display_t* disp = lv_display_create(LCD_W, LCD_H);
   lv_display_set_color_format(disp, LV_COLOR_FORMAT_RGB565);
-  lv_display_set_buffers(disp, b1, b2, BUF_PIXELS * 2, LV_DISPLAY_RENDER_MODE_PARTIAL);
+  lv_display_set_buffers(disp, frame, nullptr, bytes, LV_DISPLAY_RENDER_MODE_DIRECT);
   lv_display_set_flush_cb(disp, flushCb);
-  lv_display_add_event_cb(disp, roundAreaCb, LV_EVENT_INVALIDATE_AREA, nullptr);
   lv_obj_set_style_bg_color(lv_screen_active(), lv_color_black(), 0);
   return true;
+}
+
+void setRotation(int deg) {
+  turn = rot::make(deg, LCD_W);
+  if (frame) {
+    gfx->fillScreen(0x0000);
+    lv_obj_invalidate(lv_screen_active());     // redraw (and re-send) everything at the new angle
+    lv_obj_invalidate(lv_layer_top());
+  }
+}
+
+int rotation() { return turn.deg; }
+
+void toLogical(int16_t& x, int16_t& y) {
+  float lx, ly;
+  rot::toLogical(turn, x, y, lx, ly);
+  x = (int16_t)constrain(lroundf(lx), 0, LCD_W - 1);
+  y = (int16_t)constrain(lroundf(ly), 0, LCD_H - 1);
 }
 
 void setBrightness(uint8_t v) {

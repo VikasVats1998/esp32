@@ -1,58 +1,71 @@
-// ui_settings.cpp - brightness, volume, Wi-Fi info and quick actions.
+// ui_settings.cpp - settings list (UI kit "Settings"): tap a row to change it or open it.
+// Swipe right to go back (the list scrolls up / down).
 #include "ui_screens.h"
 #include "ui_common.h"
+#include "ui.h"
 #include "storage.h"
 #include "events.h"
 #include "net.h"
 #include "alarm_timer.h"
 #include "audio.h"
+#include "behavior.h"
+#include "display.h"
 
 namespace ui_settings {
-static lv_obj_t *lBri, *lVol, *lNet;
+enum Row { R_BRI, R_VOL, R_MODE, R_SCREEN, R_SERVO, R_NET, R_DEMO, R_ALARM, R_SETUP, R_WIFI_RESET, R_FW, R_COUNT };
+static const char* NAMES[R_COUNT] = {"Brightness", "Volume", "Mode", "Screen orientation", "Servo calibration",
+                                     "Wi-Fi", "Mood demo", "Test alarm", "First-time setup", "Forget Wi-Fi", "Firmware"};
+static lv_obj_t* val[R_COUNT];
+static uint32_t resetArmed = 0;
 
-static void changed() {
-  storage::save();
-  events::publish(events::EV_SETTINGS);
-}
-static void onBri(lv_event_t* e) {
+static void changed() { storage::save(); events::publish(events::EV_SETTINGS); }
+
+static void onRow(lv_event_t* e) {
   Settings& s = storage::get();
-  int v = s.brightness + (int)(intptr_t)lv_event_get_user_data(e);
-  s.brightness = constrain(v, 10, 255);
-  changed();
+  switch ((Row)(intptr_t)lv_event_get_user_data(e)) {
+    case R_BRI: { int p = (s.brightness * 100 + 127) / 255; p = p >= 100 ? 20 : ((p / 20) + 1) * 20; s.brightness = p * 255 / 100; changed(); break; }
+    case R_VOL: s.volume = s.volume >= 100 ? 0 : ((s.volume / 20) + 1) * 20; changed(); audio::play(audio::MEL_CLICK); break;
+    case R_MODE: behavior::setMode((behavior::Mode)((behavior::mode() + 1) % 3)); break;
+    case R_SCREEN: ui::show(ui::S_ORIENT); break;
+    case R_SERVO: ui::show(ui::S_CALIB); break;
+    case R_NET: ui::show(ui::S_NETWORK); break;
+    case R_DEMO: ui::startMoodDemo(); break;
+    case R_ALARM: alarm_timer::testRing(); break;
+    case R_SETUP: s.setupDone = false; storage::save(); ui::show(ui::S_SETUP); break;
+    case R_WIFI_RESET:
+      if (resetArmed && millis() - resetArmed < 4000) { resetArmed = 0; storage::clearWifi(); net::restartWifi(); ui::toast("Wi-Fi forgotten"); }
+      else { resetArmed = millis(); ui::toast("Tap again to forget Wi-Fi"); }
+      break;
+    default: break;
+  }
 }
-static void onVol(lv_event_t* e) {
-  Settings& s = storage::get();
-  int v = s.volume + (int)(intptr_t)lv_event_get_user_data(e);
-  s.volume = constrain(v, 0, 100);
-  changed();
-  audio::play(audio::MEL_CLICK);
-}
-static void onTestAlarm(lv_event_t*) { alarm_timer::testRing(); }
 
 lv_obj_t* create(lv_obj_t* parent) {
   lv_obj_t* p = uic::panel(parent);
-  uic::label(p, &lv_font_montserrat_20, 0xFFFFFF, "Settings", 50);
-  lBri = uic::label(p, &lv_font_montserrat_20, 0xFFD060, "", 110);
-  uic::button(p, "-", 100, 140, 80, 46, onBri, (void*)-20);
-  uic::button(p, "+", 286, 140, 80, 46, onBri, (void*)20);
-  lVol = uic::label(p, &lv_font_montserrat_20, 0x60D0FF, "", 205);
-  uic::button(p, "-", 100, 235, 80, 46, onVol, (void*)-10);
-  uic::button(p, "+", 286, 235, 80, 46, onVol, (void*)10);
-  uic::button(p, "Test alarm", 163, 300, 140, 40, onTestAlarm);
-  lNet = uic::label(p, &lv_font_montserrat_14, 0x80C0FF, "", 355);
+  uic::title(p, "Settings", 58);
+  lv_obj_t* l = uic::list(p, 96, 320, 320);
+  for (int i = 0; i < R_COUNT; i++) {
+    lv_obj_t* r = uic::card(l, 0, 0, 320, 46, i == R_FW ? nullptr : onRow, (void*)(intptr_t)i, 0x1E232A, 23);
+    uic::label(r, &inter_16, i == R_WIFI_RESET ? uic::C_RED : uic::C_TEXT, NAMES[i], 0, LV_ALIGN_LEFT_MID, 18);
+    val[i] = uic::label(r, &inter_16, uic::C_CYAN, "", 0, LV_ALIGN_RIGHT_MID, -18);
+  }
   return p;
 }
 
-void update() {
+void update(uint32_t) {
   Settings& s = storage::get();
-  char buf[64];
-  snprintf(buf, sizeof(buf), "Brightness %d%%", s.brightness * 100 / 255);
-  uic::setText(lBri, buf);
-  snprintf(buf, sizeof(buf), "Volume %d%%", s.volume);
-  uic::setText(lVol, buf);
-  if (net::connected()) snprintf(buf, sizeof(buf), "%s   chiku.local", net::ip());
-  else if (net::portalActive()) snprintf(buf, sizeof(buf), "Join Wi-Fi \"%s\" to set up", AP_SSID);
-  else snprintf(buf, sizeof(buf), "Wi-Fi: not connected");
-  uic::setText(lNet, buf);
+  char b[40];
+  snprintf(b, sizeof(b), "%d%%", (s.brightness * 100 + 127) / 255); uic::setText(val[R_BRI], b);
+  snprintf(b, sizeof(b), "%d%%", s.volume); uic::setText(val[R_VOL], b);
+  uic::setText(val[R_MODE], behavior::mode() == behavior::MODE_AUTO ? "Playful" : behavior::mode() == behavior::MODE_EXPLORE ? "Explore" : "Manual");
+  snprintf(b, sizeof(b), "%d\xC2\xB0", display::rotation()); uic::setText(val[R_SCREEN], b);
+  uic::setText(val[R_SERVO], s.servoCalibrated ? "Done" : "Not yet");
+  uic::setText(val[R_NET], net::connected() ? s.ssid : "Offline");
+  uic::setText(val[R_DEMO], LV_SYMBOL_PLAY);
+  uic::setText(val[R_ALARM], LV_SYMBOL_BELL);
+  uic::setText(val[R_SETUP], LV_SYMBOL_RIGHT);
+  uic::setText(val[R_FW], FW_VERSION);
 }
+void onShow() {}
+void onHide() {}
 }  // namespace ui_settings

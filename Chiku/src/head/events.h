@@ -11,7 +11,7 @@ enum Type : uint8_t {
   // input
   EV_TOUCH_TAP,      // a=x b=y
   EV_TOUCH_LONG,     // a=x b=y
-  EV_SWIPE,          // a=+1 left->right swipe, -1 right->left
+  EV_SWIPE,          // a=+1 left->right swipe, -1 right->left; vertical: a=0, b=-1 up, +1 down
   EV_PAD,            // a=pad id (PAD_*), b=pads::Gesture
   // imu
   EV_SHAKE, EV_PICKUP, EV_PUTDOWN, EV_FALL, EV_TAP_IMU,
@@ -37,6 +37,9 @@ enum Type : uint8_t {
   EV_POWER,          // a=power state (0 active,1 dim,2 sleep)
   EV_WAKE,
   EV_DESK,           // a=1 desk rising, 2 lowering, 3 stopped/arrived, 4 desk link lost, 5 paired
+  EV_LOUD,           // a=sound level dB (microphones heard a sudden loud sound)
+  EV_NOTIFY,         // a=mood id: a notification arrived (text: ui_notify)
+  EV_BATTERY,        // a=1 low battery, 2 charging started, 3 back to normal; b=percent
   EV_TYPE_COUNT
 };
 

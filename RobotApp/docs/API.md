@@ -8,7 +8,7 @@ Firmware sources: `Chiku/src/head/net.cpp` and `Jinu/src/net.cpp`. `RobotApp/too
 
 | Request | Answer |
 |---|---|
-| `GET /api/state` | `robot` (`chiku`/`jinu`), `api`, `fw`, `caps[]`, `ip`, `ssid`, `rssi`, `uptime` (s), `heap`, `mode`, `mute`, `mood`, `brightness`, `volume`, `dist` (cm, -1 = none), `pads` (bit n = pad n touched), `padsOnline`, `avoid`, `gait`, `busy`, `power` (0 active, 1 dim, 2 sleep), `audio`, `servo[]` = `{trim,min,max,inv,cur}`. Chiku adds `screen`, `batt`, `charging`, `pca`, `imu{ok,x,y,z,tilt}`, `cam{alive,ip,state,stream,snap}` (`snap` = size in bytes of the last snapshot), `weather`, `lat`, `lon`, `alarms[]`, `timers[]` |
+| `GET /api/state` | `robot` (`chiku`/`jinu`), `api`, `fw`, `caps[]`, `ip`, `ssid`, `rssi`, `uptime` (s), `heap`, `mode`, `mute`, `mood`, `brightness`, `volume`, `dist` (cm, -1 = none), `pads` (bit n = pad n touched), `padsOnline`, `avoid`, `gait`, `busy`, `power` (0 active, 1 dim, 2 sleep), `audio`, `servo[]` = `{trim,min,max,inv,cur}`. Chiku adds `screen`, `screenName`, `rotation` (screen rotation, degrees), `setupDone`, `mic` (sound level dB, -1 = no mic), `micOk`, `batt`, `charging`, `pca`, `imu{ok,x,y,z,tilt}`, `cam{alive,ip,state,stream,snap}` (`snap` = size in bytes of the last snapshot), `weather`, `lat`, `lon`, `alarms[]`, `timers[]` |
 | `GET /api/events?since=N` | `{"next":N2,"events":[{n,t,type,a,b}]}`: last 48 events with `n > since` (touch gestures, shake, buttons ...). If `next` is smaller than your cursor the robot rebooted |
 | `GET /api/log?since=N` | `{"next":N2,"lines":[{n,t,l,m}]}`: the robot's complete log (last 100 lines): its own `[tag] text` lines, every API call it received (`[api] POST /api/mood m=3`), every event, and the ESP system logs (Wi-Fi, I2C errors ...). `l` = 0 error, 1 warning, 2 info, 3 debug. Also printed on the USB serial port. If `next` is smaller than your cursor the robot rebooted |
 | `GET /api/diag` | `{"items":[{name,ok,detail,live}],heap,uptime}`: results of the start-up hardware checks (display, touch, imu, rtc, pmu, psram, audio, servo_driver, pad_expander, filesystem) plus live checks (sonar, wifi, heap; Chiku: imu_gravity, rtc_time, cam_link, battery) |
@@ -35,9 +35,9 @@ Pad ids: Chiku 0 ear L, 1 ear R, 2 leg L, 3 leg R, 4 body. Jinu 0 head L, 1 head
 
 | Request | Effect |
 |---|---|
-| `POST /api/mood?m=0..15&hold=ms` | face (`hold` default 5000, 0 = stay) |
+| `POST /api/mood?name=happy&hold=ms&move=1` | face by name (or `m=` index: Jinu 0..15, Chiku 0..21: normal happy sad sleepy angry surprised dizzy love thinking listening jealous sulk shy excited scared cry curious confused bored wink error speaking; `neutral` = normal). `hold` default 5000, 0 = stay. Chiku: `move=1` = the whole emotion (face + body pose + sound) |
 | `POST /api/look?x=-1..1&y=-1..1` | look direction |
-| `POST /api/motion?g=NAME&n=cycles` | gait or emotion gait: home walk back left right bend shakeleg moonwalk dance jump wiggle happy excited angry scared sulk jealous shy love sad surprised tiltl tiltr |
+| `POST /api/motion?g=NAME&n=cycles` | gait or emotion gait: home walk back left right bend shakeleg moonwalk dance jump wiggle happy excited angry scared sulk jealous shy love sad surprised tiltl tiltr; Chiku also (UI kit poses): sleepy curious confused bored dizzy wink thinking listen speak |
 | `POST /api/motion?stop=1` or `?avoid=1\|0` | stop / explore on-off |
 | `POST /api/servo/set?ch=&deg=&speed=` | move a servo (speed in deg/s, default 90); obeys trim and limits |
 | `POST /api/servo/release` | power the servos off |
@@ -49,7 +49,9 @@ Pad ids: Chiku 0 ear L, 1 ear R, 2 leg L, 3 leg R, 4 body. Jinu 0 head L, 1 head
 | `POST /api/display?p=0..6` | test pattern: 0 off, red, green, blue, white, black, grey ramp |
 | `POST /api/sim?pad=N&g=1..5` | pretend a pad gesture happened |
 | `POST /api/sim?ev=NAME` | Chiku: shake pickup putdown fall tap obstacle touch alarm. Jinu: obstacle button |
-| `POST /api/screen?id=0..8` | Chiku screen (Face Clock Weather Timer Sonar Camera Settings Menu Calibration) |
+| `POST /api/screen?name=clock` | Chiku screen by name (or `id=` index): face clock weather timer menu alarms moves sensors sonar camera network games desk settings calibration orientation power goodnight ringing notify boot setup |
+| `POST /api/notify?title=Doorbell&text=...&mood=surprised` | Chiku: alert screen (big eyes in the mood colour, card with the text, closes after 20 s) + matching emotion. For Home Assistant, Node-RED ... |
+| `POST /api/rotation?deg=0..359&save=1` | Chiku: turn the screen picture and touch by any angle; `save=1` keeps it (NVS) |
 
 ## Settings and system
 
