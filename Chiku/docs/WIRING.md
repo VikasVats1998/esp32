@@ -13,9 +13,11 @@ The 8-pin header has **only 5 usable GPIOs** and **no I2C pins**:
 | 3 | 3V3 | neck 3.3 V (logic for PCA9685, TTP223) |
 | 4 | GPIO44 (U0RXD) | UART RX  <- ESP32-CAM TX |
 | 5 | GPIO43 (U0TXD) | UART TX  -> ESP32-CAM RX |
-| 6 | GPIO17 | external I2C **SDA** (PCA9685) |
-| 7 | GPIO18 | external I2C **SCL** (PCA9685) |
-| 8 | GPIO16 | TTP223 **body** pad OUT |
+| 6 | GPIO17 | external I2C **SCL** (PCA9685) |
+| 7 | GPIO18 | TTP223 **body** pad OUT |
+| 8 | GPIO16 | external I2C **SDA** (PCA9685) |
+
+(Found on the real robot with the `ServoTest` pin hunt, 22 Nov: the first plan had SDA/SCL on 17/18.)
 
 Everything else is used on the board (display 4-7/12/13/38/39, touch 11/40, SD 1-3,
 audio 8/9/10/42/45/46, onboard I2C 14/15, USB 19/20, BOOT 0, IMU INT 21, strapping/flash/PSRAM).
@@ -37,7 +39,7 @@ free two pins, set `PIN_SONAR_TRIG/ECHO` in `include/pins.h` and the head reads 
 | Bus | Pins | Devices |
 |---|---|---|
 | Onboard `Wire` | GPIO15 SDA / GPIO14 SCL | ES8311 0x18, TCA9554 0x20, AXP2101 0x34, **ES7210 0x40**, PCF85063 0x51, CST9217 0x5A, QMI8658 0x6B |
-| External `Wire1` | GPIO17 SDA / GPIO18 SCL | **PCA9685 0x40** (alone on the bus) |
+| External `Wire1` | GPIO16 SDA / GPIO17 SCL | **PCA9685 0x40** (alone on the bus) |
 
 The PCA9685 default address 0x40 equals the onboard ES7210. They are on **different buses**,
 so there is no clash. (If you ever join the buses, solder PCA9685 pad A0 -> address 0x41.)
@@ -58,9 +60,9 @@ angle once in Settings -> Screen orientation ([CALIBRATION.md](CALIBRATION.md)).
 |---|---|---|---|
 | 1 | GND | 2 | common GND (buck, PCA9685, TTP223, ESP32-CAM) |
 | 2 | 3V3 | 3 | PCA9685 VCC, TTP223 VCC |
-| 3 | SDA | 6 (GPIO17) | PCA9685 SDA |
-| 4 | SCL | 7 (GPIO18) | PCA9685 SCL |
-| 5 | TTP223 | 8 (GPIO16) | TTP223 OUT |
+| 3 | SDA | 8 (GPIO16) | PCA9685 SDA |
+| 4 | SCL | 6 (GPIO17) | PCA9685 SCL |
+| 5 | TTP223 | 7 (GPIO18) | TTP223 OUT |
 | 6 | CAM TX | 4 (GPIO44, head RX) | ESP32-CAM GPIO14 (crossed) |
 | 7 | CAM RX | 5 (GPIO43, head TX) | ESP32-CAM GPIO13 (crossed) |
 
@@ -73,9 +75,11 @@ Connect all GNDs together (buck GND, PCA9685 GND, neck GND, ESP32-CAM GND).
 | Part | Connection |
 |---|---|
 | PCA9685 V+ | 5 V buck output (5 A) + a 470-1000 uF capacitor close to the board |
-| PCA9685 ch0 / ch1 | left hip / right hip |
-| PCA9685 ch2 / ch3 | left ankle / right ankle ("feet" in the UI kit) |
-| PCA9685 ch4 | head pan = "neck" in the UI kit (90 = forward, +-90 deg) |
+| PCA9685 ch1 / ch2 | right foot / right hip |
+| PCA9685 ch3 / ch4 | left foot / left hip ("feet" = ankles in the UI kit) |
+| PCA9685 ch5 | head pan = "neck" in the UI kit (90 = forward, +-90 deg) |
+
+The channel of each servo is set in `include/pins.h` (`SERVO_HW_CH`), so you can rewire without changing other code.
 | TTP223 | VCC 3.3 V, GND, OUT -> neck wire 5 (active HIGH) |
 | HC-SR04P (3.3 V version) | VCC 3.3 V (from the ESP32-CAM 3V3 pin), GND, TRIG -> CAM GPIO15, ECHO -> CAM GPIO2 |
 
@@ -95,7 +99,7 @@ The cam UART is **not** UART0 (GPIO1/3), so the USB-TTL flashing adapter does no
 
 ## Touch pads (5x TTP223) - ears, legs, body
 
-The header has no free pin for five pads, so only the **body (middle) pad** is on GPIO16.
+The header has no free pin for five pads, so only the **body (middle) pad** is on GPIO18.
 The other four use one **PCF8574** I2C expander on the same neck I2C wires (SDA = GPIO17, SCL = GPIO18,
 no extra neck wires). Put the PCF8574 module in the body, address **0x20** (A0, A1, A2 to GND). It does
 not clash with the PCA9685 (0x40). Use the **PCF8574** (0x20), not the PCF8574A (0x38).
@@ -106,7 +110,7 @@ not clash with the PCA9685 (0x40). Use the **PCF8574** (0x20), not the PCF8574A 
 | Right ear (headphone) | head right | PCF8574 P1 |
 | Left leg | left leg | PCF8574 P2 |
 | Right leg | right leg | PCF8574 P3 |
-| Body | middle of the body | head GPIO16 (header pin 8) |
+| Body | middle of the body | head GPIO18 (header pin 7) |
 
 Each TTP223: VCC to 3V3, GND to GND, OUT to the pin above (active HIGH, default TTP223 jumper settings).
 Wires to the ears/legs are touch lines: keep them short and away from the servo wires.

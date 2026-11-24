@@ -111,7 +111,7 @@ void run() {
       servo::setTarget(c, 90, 40); pump(500);
     }
   }
-  line("pca9685", pca, pca ? "(5 servos moved)" : "(not found on GPIO17/18)");
+  line("pca9685", pca, pca ? "(5 servos moved)" : "(not found on GPIO16/17)");
 
   // 7/8. cam link and sonar (sonar data comes from the cam)
   t0 = millis();

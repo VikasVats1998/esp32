@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Servo Tester</title>
+<style>
+:root{--bg:#0f1218;--card:#181d27;--line:#2a3140;--fg:#e6e9ef;--mut:#8b93a5;--ok:#3ddc84;--warn:#ffb84d;--bad:#ff5d5d;--acc:#4da3ff}
+@media(prefers-color-scheme:light){:root{--bg:#f3f5f9;--card:#fff;--line:#d9deea;--fg:#1a2030;--mut:#5b6478}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px system-ui,sans-serif;padding:16px;max-width:1200px;margin:auto}
+h1{font-size:20px;margin:0 0 4px}.mut{color:var(--mut);font-size:13px}
+.top{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:12px 0}
+button{background:var(--acc);color:#fff;border:0;border-radius:8px;padding:7px 12px;font-size:13px;cursor:pointer}
+button.sec{background:var(--bg);color:var(--fg);border:1px solid var(--line)}button.go{background:var(--ok);color:#06210f;font-weight:700}button.stop{background:var(--bad)}
+.pill{padding:4px 10px;border-radius:99px;border:1px solid var(--line);color:var(--mut);font-size:13px}.pill.on{color:var(--ok);border-color:var(--ok)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px}.card.held{border-color:var(--warn)}.card.spare{border-style:dashed}
+h2{font-size:14px;margin:0 0 6px;display:flex;justify-content:space-between}
+.big{font-size:28px;font-weight:700;font-variant-numeric:tabular-nums}.row{display:flex;gap:6px;align-items:center;margin:7px 0;flex-wrap:wrap}
+input[type=range]{flex:1;min-width:100px}input[type=number]{width:62px;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:4px}
+.sg{font-size:13px}
+</style></head><body>
+<h1>Servo tester</h1>
+<div class="mut">All channels start <b>FREE</b> (no signal, servo limp). Cards 1–4 are the Otto servo pins; the dashed cards are spare header pins so you can test a spare servo on any pin. Pulse 500 µs = 0°, 1500 µs = 90°, 2500 µs = 180°.</div>
+<div class="top">
+  <span class="pill" id="conn">waiting…</span>
+  <button class="sec" id="freeall">🔓 Free all</button>
+  <button class="sec" id="hold90">Hold all 90°</button>
+  <span class="mut">Ramp speed:</span><input type="range" id="spd" min="0" max="360" step="10" value="0" style="width:140px"><b id="spdv">instant</b>
+</div>
+<div class="grid" id="grid"></div>
+<script>
+const $=id=>document.getElementById(id);
+const names=['LEFT HIP · GPIO9','RIGHT HIP · GPIO5','LEFT FOOT · GPIO17','RIGHT FOOT · GPIO16','SPARE · GPIO1','SPARE · GPIO2','SPARE · GPIO3','SPARE · GPIO4'];
+const send=c=>fetch('/cmd',{method:'POST',body:c}).catch(()=>{});
+const deg=us=>Math.round((us-500)*180/2000),us=d=>Math.round(500+d*2000/180);
+let drag=-1,last=0;
+$('grid').innerHTML=names.map((n,i)=>`
+<div class="card ${i>3?'spare':''}" id="c${i}"><h2><span>${n}</span><span id="st${i}" class="mut">FREE</span></h2>
+ <div class="row"><div class="big" id="us${i}">–</div><span class="mut">µs</span><span class="mut" id="dg${i}"></span></div>
+ <div class="row"><input type="range" min="500" max="2500" step="10" value="1500" id="s${i}"></div>
+ <div class="row"><button class="sec" data-u="${i},500">0°</button><button class="sec" data-u="${i},1000">45°</button><button class="sec" data-u="${i},1500">90°</button>
+  <button class="sec" data-u="${i},2000">135°</button><button class="sec" data-u="${i},2500">180°</button><button class="go" data-f="${i}">Free</button></div>
+ <div class="row"><span class="mut">Sweep</span><input type="number" id="mn${i}" value="40" min="0" max="180"><span class="mut">–</span><input type="number" id="mx${i}" value="140" min="0" max="180">
+  <input type="number" id="pr${i}" value="1500" min="300" step="100" title="ms per cycle"><span class="mut">ms</span><button id="sw${i}">Start</button></div>
+ <div class="sg mut" id="sg${i}">signal: –</div></div>`).join('');
+document.querySelectorAll('[data-u]').forEach(b=>b.onclick=()=>{const [i,v]=b.dataset.u.split(',');send(`!u,${i},${v}`);$('s'+i).value=v;});
+document.querySelectorAll('[data-f]').forEach(b=>b.onclick=()=>send(`!f,${b.dataset.f}`));
+for(let i=0;i<8;i++){const s=$('s'+i);s.onpointerdown=()=>drag=i;s.onpointerup=()=>drag=-1;s.oninput=()=>send(`!u,${i},${s.value}`);
+  $('sw'+i).onclick=()=>{const on=$('sw'+i).dataset.on==='1';send(on?`!x,${i}`:`!s,${i},${$('mn'+i).value},${$('mx'+i).value},${$('pr'+i).value}`);};}
+$('freeall').onclick=()=>send('!f,-1');$('hold90').onclick=()=>{for(let i=0;i<8;i++)send(`!u,${i},1500`)};
+$('spd').oninput=()=>{const v=+$('spd').value;$('spdv').textContent=v?v+'°/s':'instant';send(`!v,${v}`);};
+new EventSource('/stream').onmessage=e=>{const l=e.data.trim();if(!l.startsWith('S,'))return;const p=l.split(',').map(Number);if(p.length<26)return;last=Date.now();
+  for(let i=0;i<8;i++){const t=p[2+i*3],c=p[3+i*3],m=p[4+i*3],held=t>0;
+    $('c'+i).classList.toggle('held',held);$('st'+i).textContent=held?'HOLDING':'FREE';$('st'+i).style.color=held?'var(--warn)':'var(--ok)';
+    $('us'+i).textContent=held?c:'–';$('dg'+i).textContent=held?deg(c)+'°':'';
+    if(held&&drag!==i)$('s'+i).value=t;
+    const sg=$('sg'+i);const exp=c;
+    if(!held){sg.textContent='signal: none (free)';sg.style.color='var(--mut)';}
+    else if(m>0&&Math.abs(m-exp)<80){sg.textContent='signal: '+m+' µs ✔ pin is driving';sg.style.color='var(--ok)';}
+    else if(m>0){sg.textContent='signal: '+m+' µs (expected ~'+exp+') – line is loaded';sg.style.color='var(--warn)';}
+    else{sg.textContent='signal: NO PULSE ✘';sg.style.color='var(--bad)';}
+  }};
+// sweep button label follows the card state heuristically: toggles on click
+for(let i=0;i<8;i++){const b=$('sw'+i);b.dataset.on='0';b.addEventListener('click',()=>{const on=b.dataset.on==='1';b.dataset.on=on?'0':'1';b.textContent=on?'Start':'Stop';b.classList.toggle('stop',!on);});
+  ['[data-f="'+i+'"]','[data-u^="'+i+',"]'].forEach(sel=>document.querySelectorAll(sel).forEach(x=>x.addEventListener('click',()=>{b.dataset.on='0';b.textContent='Start';b.classList.remove('stop');})));}
+$('freeall').addEventListener('click',()=>{for(let i=0;i<8;i++){const b=$('sw'+i);b.dataset.on='0';b.textContent='Start';b.classList.remove('stop');}});
+setInterval(()=>{const ok=Date.now()-last<1000;$('conn').textContent=ok?'connected':'no data from board';$('conn').className='pill'+(ok?' on':'')},500);
+</script></body></html>

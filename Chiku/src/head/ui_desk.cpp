@@ -1,4 +1,4 @@
-// ui_desk.cpp - control the standing desk from Chiku's screen (open it from the long-press menu: "Desk control").
+// ui_desk.cpp - control the standing desk from Chiku's screen (Settings -> Standing desk).
 // UP / DOWN work while held (dead-man: the desk stops when you let go), STOP, memory positions 1-4.
 #include "ui_screens.h"
 #include "ui_common.h"
@@ -15,7 +15,7 @@ static void onRelease(lv_event_t*) {
 }
 static void onStop(lv_event_t*) { holdDir = 0; desk::moveHold(0); desk::command("stop"); }
 static void onPreset(lv_event_t* e) { desk::command("preset", (int)(intptr_t)lv_event_get_user_data(e)); }
-static void onBack(lv_event_t*) { holdDir = 0; ui::show(ui::S_FACE); }
+static void onBack(lv_event_t*) { holdDir = 0; ui::back(); }
 
 // Keeps sending "move" while a button is held (every 200 ms).
 static void holdTimer(lv_timer_t*) {

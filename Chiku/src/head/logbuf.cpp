@@ -31,7 +31,7 @@ void log(Level lvl, const char* tag, const char* fmt, ...) {
   va_end(ap);
   store(lvl, buf);
   static const char C[] = {'E', 'W', 'I', 'D'};
-  Serial.printf("%10lu %c %s\n", (unsigned long)millis(), C[lvl], buf);
+  if (Serial.isConnected()) Serial.printf("%10lu %c %s\n", (unsigned long)millis(), C[lvl], buf);   // never stall when no PC listens
 }
 
 // System log lines ("E (1234) wifi: text", with colour codes) -> ring + serial.
@@ -53,6 +53,7 @@ static int hook(const char* fmt, va_list ap) {
   }
   clean[j] = 0;
   if (j) store(lvl, clean);
+  if (!Serial.isConnected()) return 0;            // nobody reading: do not risk blocking on the USB port
   return previous ? previous(fmt, ap) : 0;
 }
 

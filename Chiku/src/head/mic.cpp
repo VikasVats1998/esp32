@@ -1,93 +1,104 @@
-// mic.cpp - see mic.h. ES7210 register setup follows Espressif's es7210 driver (esp_codec_dev):
-// I2S slave, 16 bit, 16 kHz with MCLK = 256 * fs, microphones 1+2 on, 3+4 off.
+// mic.cpp - see mic.h
 #include "mic.h"
 #include "config.h"
 #include "logbuf.h"
-#include "bus.h"
 #include "events.h"
 #include "audio.h"
+#include "storage.h"
 #include <math.h>
 
 namespace mic {
 
+static volatile int lvl = 0, pk = 0;
+static volatile float floorLvl = 0;
 static bool ok = false;
-static volatile float lvl = 0;
+
+bool online() { return ok; }
+int level() { return lvl; }
+int peak() { return pk; }
+float noiseFloor() { return floorLvl; }
 static volatile int dbVal = -1;
 static volatile uint32_t burstCount = 0;
+int db() { return ok ? dbVal : -1; }
+uint32_t bursts() { return burstCount; }
 
-static void wr(uint8_t reg, uint8_t v) { bus::writeReg(I2C_ADDR_ES7210, reg, v); }
-
-static bool codecInit() {
-  if (!bus::probe(I2C_ADDR_ES7210)) return false;
-  wr(0x00, 0xFF); delay(10);              // reset
-  wr(0x00, 0x41);
-  wr(0x01, 0x3F);                         // clocks off while configuring
-  wr(0x09, 0x30); wr(0x0A, 0x30);         // power-up timing
-  wr(0x23, 0x2A); wr(0x22, 0x0A);         // high-pass filters
-  wr(0x20, 0x0A); wr(0x21, 0x2A);
-  wr(0x08, 0x20);                         // slave mode
-  wr(0x40, 0x43);                         // analog reference
-  wr(0x41, 0x70); wr(0x42, 0x70);         // mic bias 2.87 V
-  wr(0x07, 0x20);                         // OSR
-  wr(0x02, 0xC1);                         // MCLK 4.096 MHz -> 16 kHz (div 1, doubler, DLL)
-  wr(0x04, 0x01); wr(0x05, 0x00);         // LRCK divider 256
-  wr(0x11, 0x60);                         // I2S format, 16 bit
-  wr(0x12, 0x00);                         // normal (no TDM): mic1 left, mic2 right
-  wr(0x43, 0x10 | MIC_GAIN); wr(0x44, 0x10 | MIC_GAIN);   // mic 1/2 on, gain
-  wr(0x45, 0x00); wr(0x46, 0x00);         // mic 3/4 off
-  wr(0x47, 0x08); wr(0x48, 0x08);
-  wr(0x4B, 0x00);                         // mic 1/2 power on
-  wr(0x4C, 0xFF);                         // mic 3/4 power off
-  wr(0x01, 0x14);                         // clocks on for ADC 1/2
-  wr(0x06, 0x00);                         // power on
-  wr(0x00, 0x71); wr(0x00, 0x41);         // start
-  return true;
+static int toPct(float amp) {                    // amplitude 0..32767 -> 0..100 (-60..-10 dBFS)
+  if (amp < 1) return 0;
+  float db = 20.f * log10f(amp / 32768.f);
+  return constrain((int)((db + 60.f) * 2.f), 0, 100);
 }
 
-static void micTask(void*) {
-  static int16_t buf[256 * 2];
-  uint32_t loudSince = 0, quietSince = millis(), lastLoudEvt = 0;
-  for (;;) {
-    size_t n = audio::micRead(buf, 256);
-    if (n == 0) { vTaskDelay(pdMS_TO_TICKS(50)); continue; }
-    float sum = 0;
-    for (size_t i = 0; i < n; i++) sum += (float)buf[2 * i] * buf[2 * i];
-    float rms = sqrtf(sum / n) + 1.f;
-    float dbfs = 20.f * log10f(rms / 32768.f);
-    dbVal = (int)(dbfs + MIC_DB_OFFSET);
-    float target = constrain((dbfs + 60.f) / 45.f, 0.f, 1.f);
-    lvl = lvl + (target - lvl) * (target > lvl ? 0.6f : 0.15f);   // fast attack, slow release
-    uint32_t now = millis();
-    bool selfSound = audio::playing();
-    bool loud = dbVal >= MIC_VOICE_DB && !selfSound;
-    if (loud) {
-      if (!loudSince) loudSince = now;
-      if (dbVal >= MIC_LOUD_DB && now - quietSince < 300 && now - lastLoudEvt > 3000) {   // sudden bang
-        lastLoudEvt = now;
-        events::publish(events::EV_LOUD, dbVal);
-      }
-    } else {
-      if (loudSince && now - loudSince >= 250 && now - loudSince <= 3000) burstCount = burstCount + 1;
-      loudSince = 0;
-      quietSince = now;
+static volatile bool external = false;           // the speech engine reads the mic, we are fed by the tap
+static int16_t blockBuf[256 * 2];
+
+// state of the analyser (shared by the task and the tap)
+static float smooth = 0, floorAmp = 300, prevPeak = 0;
+static uint32_t lastClap = 0, firstClap = 0, quietUntil = 0;
+static uint8_t claps = 0;
+
+// Analyse interleaved stereo frames (any block length).
+static void feed(const int16_t* buf, size_t n) {
+  float sum = 0, mx = 0;
+  for (size_t i = 0; i < n; i++) {
+    float m = 0.5f * (buf[2 * i] + buf[2 * i + 1]);
+    sum += m * m;
+    float a = fabsf(m);
+    if (a > mx) mx = a;
+  }
+  float rms = sqrtf(sum / (n ? n : 1));
+  smooth += (rms - smooth) * (rms > smooth ? 0.5f : 0.1f);
+  lvl = toPct(smooth);
+  pk = toPct(mx);
+  uint32_t now = millis();
+  if (audio::playing()) quietUntil = now + 400;
+  // UI kit: dB value, sudden loud sound (EV_LOUD), voice bursts for the setup mic check
+  dbVal = (int)(20.f * log10f((smooth + 1.f) / 32768.f) + MIC_DB_OFFSET);
+  static uint32_t loudSince = 0, calmSince = 0, lastLoudEvt = 0;
+  if (now > quietUntil && dbVal >= MIC_VOICE_DB) {
+    if (!loudSince) loudSince = now;
+    if (dbVal >= MIC_LOUD_DB && now - calmSince < 300 && now - lastLoudEvt > 3000) {
+      lastLoudEvt = now;
+      events::publish(events::EV_LOUD, dbVal);
     }
+  } else {
+    if (loudSince && now - loudSince >= 250 && now - loudSince <= 3000) burstCount = burstCount + 1;
+    loudSince = 0;
+    calmSince = now;
+  }
+  if (rms < floorAmp * 2.5f) floorAmp += (rms - floorAmp) * 0.01f;
+  floorLvl = toPct(floorAmp);
+  Settings& s = storage::get();
+  if (s.clapWake && now > quietUntil) {
+    float thr = fmaxf(3000.f + (100 - s.clapSens) * 110.f, floorAmp * 8.f);
+    bool clap = mx > thr && prevPeak < thr * 0.5f && now - lastClap > 120;
+    if (clap) {
+      lastClap = now;
+      if (!claps) { claps = 1; firstClap = now; }
+      else if (now - firstClap < 900) { claps = 0; events::publish(events::EV_CLAP, 2); LOGI("mic", "double clap (peak %d)", (int)mx); }
+    }
+    if (claps == 1 && now - firstClap > 900) { claps = 0; events::publish(events::EV_CLAP, 1); LOGI("mic", "clap (peak %d)", (int)mx); }
+  } else claps = 0;
+  prevPeak = mx;
+}
+
+void useExternalReader(bool on) {
+  external = on;
+  audio::micTap(on ? feed : nullptr);
+}
+
+static void task(void*) {
+  for (;;) {
+    if (external) { vTaskDelay(pdMS_TO_TICKS(50)); continue; }
+    size_t got = audio::micRead((int16_t*)blockBuf, sizeof(blockBuf));
+    if (!got) { vTaskDelay(pdMS_TO_TICKS(5)); continue; }
+    feed(blockBuf, got / 4);
   }
 }
 
-bool init() {
-  if (!audio::online()) return false;
-  bus::lock();
-  ok = codecInit();
-  bus::unlock();
-  if (!ok) { LOGW("mic", "ES7210 not found at 0x%02X", I2C_ADDR_ES7210); return false; }
-  xTaskCreatePinnedToCore(micTask, "mic", 3072, nullptr, 2, nullptr, 0);
-  LOGI("mic", "ES7210 ready");
-  return true;
+void init() {
+  ok = audio::micBegin();
+  LOGI("mic", "microphone %s", ok ? "ready" : "NOT available");
+  if (ok) xTaskCreatePinnedToCore(task, "mic", 4096, nullptr, 1, nullptr, 0);
 }
-
-bool online() { return ok; }
-float level() { return lvl; }
-int db() { return ok ? dbVal : -1; }
-uint32_t bursts() { return burstCount; }
 
 }  // namespace mic

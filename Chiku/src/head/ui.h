@@ -14,6 +14,7 @@ enum Screen : uint8_t {
   S_MENU,                                              // radial menu (swipe up)
   S_ALARMS, S_MOVES, S_SENSORS, S_SONAR, S_CAMERA, S_NETWORK, S_GAMES, S_DESK, S_SETTINGS,
   S_CALIB, S_ORIENT, S_POWER, S_GOODNIGHT, S_RINGING, S_NOTIFY, S_BOOT, S_SETUP,
+  S_LIGHT, S_DEVICES, S_FAN, S_MOTION, S_SYSTEM,       // hub dashboard (ui_dash.cpp), menu ring "Home"
   S_COUNT
 };
 void init();                           // after display::init()

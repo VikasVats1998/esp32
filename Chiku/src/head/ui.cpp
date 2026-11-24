@@ -40,7 +40,7 @@ static const Def DEFS[S_COUNT] = {
   SCR("camera",      ui_camera,    S_SENSORS,  G_ALL),
   SCR("network",     ui_network,   S_SENSORS,  G_ALL),
   SCR("games",       ui_games,     S_MENU,     G_ALL),
-  SCR("desk",        ui_desk,      S_MENU,     G_NONE),
+  SCR("desk",        ui_desk,      S_SETTINGS, G_NONE),
   SCR("settings",    ui_settings,  S_MENU,     G_HORIZONTAL),
   SCR("calibration", ui_calib,     S_SETTINGS, G_NONE),
   SCR("orientation", ui_orient,    S_SETTINGS, G_NONE),
@@ -50,7 +50,16 @@ static const Def DEFS[S_COUNT] = {
   SCR("notify",      ui_notify,    S_FACE,     G_ALL),
   SCR("boot",        ui_boot,      S_FACE,     G_NONE),
   SCR("setup",       ui_setup,     S_FACE,     G_NONE),
+  SCR("light",       ui_light,     S_FACE,     G_ALL),          // hub dashboard (ui_dash.cpp)
+  SCR("devices",     ui_devices,   S_FACE,     G_ALL),
+  SCR("fan",         ui_fan,       S_FACE,     G_ALL),
+  SCR("motion",      ui_motion,    S_SENSORS,  G_ALL),
+  SCR("system",      ui_system,    S_SETTINGS, G_ALL),
 };
+// Swipe carousel (UI kit: Clock <-> Weather <-> Home hub <-> Timer). Other screens: menu / buttons.
+static const Screen ORDER[] = {S_FACE, S_CLOCK, S_WEATHER, S_DEVICES, S_LIGHT, S_FAN, S_TIMER};
+static const int ORDER_N = sizeof(ORDER) / sizeof(ORDER[0]);
+static int orderIndex(Screen s) { for (int i = 0; i < ORDER_N; i++) if (ORDER[i] == s) return i; return -1; }
 
 static lv_obj_t* screens[S_COUNT];
 static Screen cur = S_BOOT;
@@ -150,7 +159,7 @@ void startMoodDemo() {
 
 static void updateRings() {
   int slot = alarm_timer::activeTimer();
-  bool ringOk = cur != S_TIMER && cur != S_RINGING && cur != S_BOOT && cur != S_GOODNIGHT && cur != S_SETUP;
+  bool ringOk = cur != S_TIMER && cur != S_RINGING && cur != S_LIGHT && cur != S_FAN && cur != S_BOOT && cur != S_GOODNIGHT && cur != S_SETUP;
   if (slot < 0 || !ringOk) lv_obj_add_flag(timerRing, LV_OBJ_FLAG_HIDDEN);
   else {
     uint32_t total = alarm_timer::timerTotalMs(slot), left = alarm_timer::timerRemainingMs(slot);
@@ -158,6 +167,7 @@ static void updateRings() {
     lv_obj_remove_flag(timerRing, LV_OBJ_FLAG_HIDDEN);
   }
 }
+
 
 void update(uint32_t dtMs) {
   applyPattern();
@@ -186,11 +196,12 @@ void update(uint32_t dtMs) {
 }
 
 void onEvent(const events::Event& e) {
-  bool carousel = cur <= S_TIMER;
+  int pos = orderIndex(cur);
+  bool carousel = pos >= 0;
   switch (e.type) {
     case events::EV_SWIPE:
       if (e.a != 0) {                                   // left / right
-        if (carousel) show((Screen)(((int)cur - e.a + 4) % 4));   // swipe left (-1) = next
+        if (carousel) show(ORDER[(pos - e.a + ORDER_N) % ORDER_N]);   // swipe left (-1) = next
         else if (DEFS[cur].gestures == touch::G_HORIZONTAL && e.a > 0) back();
       } else if (e.b < 0) {                             // up
         if (carousel) show(S_MENU);

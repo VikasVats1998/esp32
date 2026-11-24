@@ -7,6 +7,7 @@ import { useConnectionNotes, useEventPump, useLogPump } from '@/hooks/use-robot'
 import { setRandomProvider } from '@/desk/crypto';
 import { installFeedback } from '@/lib/feedback';
 import { useDesk } from '@/store/desk';
+import { useHub } from '@/store/hub';
 import { getRandomBytes } from 'expo-crypto';
 import { useEffect } from 'react';
 
@@ -16,9 +17,11 @@ setRandomProvider((n) => getRandomBytes(n));
 
 function Pumps() {
   const load = useDesk((s) => s.load);
+  const loadHub = useHub((s) => s.load);
   useEffect(() => {
     load();
-  }, [load]);
+    loadHub();
+  }, [load, loadHub]);
   useEventPump();
   useLogPump();
   useConnectionNotes();

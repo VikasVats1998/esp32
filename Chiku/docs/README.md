@@ -17,8 +17,9 @@ pio run -e head
 pio run -e cam
 pio run -e head -t buildfs             # web page image (data/)
 ```
-Platform: pioarduino (Arduino core 3.x), LVGL 9.2.2 (Inter fonts, OFL), GFX Library for Arduino 1.5.9, SensorLib 0.3.1,
-XPowersLib 0.2.7, ArduinoJson 7.2.1 (all pinned in `platformio.ini`).
+Platform: pioarduino (Arduino core 3.x), LVGL 9.2.2 (Inter fonts, OFL), SensorLib 0.3.1, XPowersLib 0.2.7,
+ArduinoJson 7.2.1, ESP-SR (wake word). The display uses ESP-IDF `esp_lcd` (QSPI + DMA) directly.
+Partitions: `esp_sr_16.csv` (3 MB app x2, 7 MB LittleFS, `model` partition for the wake word).
 
 PC simulator (no board needed): `bash tools/uisim/run.sh` builds the real face + screen code with LVGL on
 the PC and writes every face, animation frame and screen to `tools/uisim/out/*.png` (also checks the
@@ -29,7 +30,8 @@ rotation math). See [TESTING.md](TESTING.md).
 **Head (USB-C):** hold **BOOT**, tap **PWR/RESET** (or plug in USB while holding BOOT), release BOOT, then
 ```bash
 pio run -e head -t upload
-pio run -e head -t uploadfs            # the settings web page
+pio run -e head -t uploadfs            # the settings web page + voice clips
+bash tools/flash_models.sh             # once per board: the wake word model ("Hi ESP")
 ```
 Press the reset/PWR button afterwards. Later updates can use OTA: `http://chiku.local/update`.
 
@@ -67,13 +69,15 @@ rotation, camera. Time: NTP (Europe/Berlin) kept in the PCF85063 RTC. Weather: O
 
 | Input | Action |
 |---|---|
-| Tap the face | happy reaction (random: happy / wink / love) |
-| Swipe left / right on the face | Clock, Weather, Timer (carousel) |
-| Swipe up | radial menu: Desk, Alarms, Timer, Sensors, Games, Moves, Settings, Power |
+| Tap the face | happy reaction (random: happy / wink / love); 5 fast taps: angry, 9: rage |
+| Swipe left / right on the face | Clock, Weather, Home, Light, Fan, Timer (carousel; Home/Light/Fan need the hub server) |
+| Swipe up | radial menu: Home, Alarms, Timer, Sensors, Games, Moves, Settings, Power |
 | Swipe down | back (lists that scroll: swipe right = back) |
 | Hold the screen 3 s | power menu: Sleep / Restart / Power off (a red ring fills while you hold) |
-| Shake / tilt | angry / dizzy |
-| Loud sound (microphones) | surprised |
+| Shake / tilt | angry (again within 6 s: rage) / small tilt: eyes look downhill, big tilt: dizzy |
+| Upside down | scared |
+| Loud sound / clap / double clap (microphones) | surprised / wakes up / excited |
+| "Hi ESP", then a command | listening face, then: light on/off, fan on/off, brighter, dimmer, go to sleep, be happy, dance |
 | No input 5 / 10 min | bored, then sleepy, then the sleep screen (touch wakes, with the wake-up animation) |
 | Battery < 15 % / plugged in | tired yellow eyes + "feed me!" and slower moves / green charging ring |
 | Wi-Fi lost | error face for 3 s |
@@ -83,11 +87,12 @@ Screens: Face, Clock (tick ring, mini eyes, next alarm), Weather, Timer (5 / 10 
 Chiku dances at the end), Alarms (list + on/off), Alarm ringing (Snooze 5' / Stop), Moves, Sensors
 (distance, camera, IMU, sound, battery, Wi-Fi), Radar (ultrasonic), Camera (stream QR, snapshot, light),
 Network, Games (Reaction: tap when the eyes flash; Dice: shake to roll), Desk, Settings, Servo calibration,
-Screen orientation, Power menu, Good night, Notification.
+Screen orientation, Power menu, Good night, Notification, and the hub screens Home (device tiles), Light,
+Fan, Motion (bubble level), System (health, clap / wake word switches): [HUB_AND_VOICE.md](HUB_AND_VOICE.md).
 
-Not built from the kit (they need a Pi hub, Home Assistant or extra hardware): home hub / light /
-thermostat / music screens, MQTT / TCP / Crestron / integrations screens, drop protection (TCRT5000),
-accessory slot, camera games (rock-paper-scissors), wake word and speech AI.
+Not built from the kit (they need more server work or extra hardware): thermostat / music screens,
+MQTT / TCP / Crestron / integrations screens, drop protection (TCRT5000), accessory slot, camera games
+(rock-paper-scissors), a custom "Hey Chiku" wake word, AI voice chat (the hub has a stub, `ai_hook()`).
 
 **Five touch pads** (ears, legs, body), each with single / double / triple / long press:
 
@@ -123,9 +128,10 @@ hello, happy, excited, shy, love, surprised, angry, sulk, scared, sad, jealous, 
 If a clip is missing it falls back to a synthesised "cute talk" babble that matches the feeling.
 Replace a clip with your own voice: web page -> Voice -> Upload (16 kHz, 16-bit, mono WAV with the same name).
 
-The two onboard microphones (ES7210, `mic.cpp`) measure the sound level: listening bars on the face, loud
-sound -> surprised, Sound tile on the Sensors screen, mic check in the setup. Not included yet: the wake word
-"Hey Chiku" and speech to text (needs Espressif ESP-SR with a custom wake word model, or streaming to a server).
+The two onboard microphones (ES7210, `mic.cpp`): sound level (listening bars, Sound tile), loud sound ->
+surprised, single / double clap, mic check in the setup. Wake word **"Hi ESP"** + 7 spoken commands run on
+the board (ESP-SR, `wake.cpp`, details in [HUB_AND_VOICE.md](HUB_AND_VOICE.md)). A custom "Hey Chiku" wake word
+needs a model trained by Espressif; the setup's "Hey Chiku" step only tests the microphones.
 
 ## Hardware self-test
 
@@ -139,10 +145,11 @@ moves slowly), cam link, sonar. The report is shown on screen and on the serial 
 | `events` | event bus (queues), the only way modules talk |
 | `bus` | shared onboard I2C with a mutex |
 | `storage` | NVS settings + LittleFS |
-| `display`, `rotate.h` | CO5300 + LVGL port (full frame in PSRAM), free screen rotation (any angle) |
+| `display`, `rotate.h` | CO5300 over esp_lcd QSPI + DMA, LVGL port (full frame in PSRAM), free screen rotation (any angle) |
+| `lv_mem_psram.c` | LVGL allocator: every LVGL object in PSRAM |
 | `face`, `face_draw` | the face: mood table, blink, look, wake-up, battery looks / drawing of every shape |
 | `ui`, `ui_common.h` | screen manager + navigation / UI kit colours, fonts, cards, rings, mini eyes |
-| `ui_*` | one file per screen (clock, weather, timer, menu, alarms, ringing, moves, sensors, sonar, camera, network, games, desk, settings, calib, orient, power, goodnight, notify, boot, setup) |
+| `ui_*` | one file per screen (clock, weather, timer, menu, alarms, ringing, moves, sensors, sonar, camera, network, games, desk, settings, calib, orient, power, goodnight, notify, boot, setup); `ui_dash` = hub screens (home, light, fan, motion, system) |
 | `behavior` | reactions (event -> face + pose + sound), feelings, idle stages |
 | `servo` | PCA9685, easing, stagger, idle power-off |
 | `motion` | gaits and the kit emotion poses, obstacle stop, neck breathing |
@@ -150,7 +157,8 @@ moves slowly), cam link, sonar. The report is shown on screen and on the serial 
 | `touch` | screen gestures (CST9217), turned by the screen rotation |
 | `pads` | 5 touch pads: ears, legs, body; tap/double/triple/long |
 | `rtc_time`, `alarm_timer`, `weather` | time, alarms (snooze) / timers (pause, Pomodoro) / stopwatch, forecast |
-| `audio`, `mic` | ES8311 speaker: beeps, melodies, babble, WAV clips / ES7210 microphones: sound level |
+| `audio`, `mic`, `wake` | ES8311 speaker: beeps, melodies, babble, WAV clips / ES7210 microphones: level, claps, loud sound / "Hi ESP" + voice commands (ESP-SR) |
+| `srvlink` | hub server client (Server/server.py): telemetry out, devices in |
 | `sonar`, `camlink` | distance filter, UART protocol to the cam |
 | `net` | Wi-Fi portal, mDNS, web API, OTA |
 | `power` | dim/sleep, power off (AXP2101), battery events |
@@ -158,7 +166,7 @@ moves slowly), cam link, sonar. The report is shown on screen and on the serial 
 
 Tasks: UI (core 1, prio 3), actuators 50 Hz (core 0, prio 4), sensors (core 0, prio 3), audio and mic
 (core 0, prio 2), network (core 0, prio 1). All tunables and feature flags: `include/config.h`.
-LVGL's heap (512 KB) and the frame buffer live in PSRAM.
+LVGL objects and the frame buffer live in PSRAM.
 
 ## How to add a face (mood)
 

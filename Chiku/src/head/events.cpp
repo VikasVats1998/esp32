@@ -17,7 +17,7 @@ static const char* NAMES[EV_TYPE_COUNT] = {
   "none", "tap", "long", "swipe", "pad", "shake", "pickup", "putdown", "fall", "imu_tap", "tilt",
   "dist_raw", "dist", "obstacle", "cam", "alarm_ring", "alarm_stop", "timer_done", "time_synced",
   "weather", "wifi", "settings", "motion", "look", "screen", "power", "wake", "desk",
-  "loud", "notify", "battery"};
+  "loud", "notify", "battery", "clap", "flip", "wakeword", "voice", "voice_end"};
 const char* name(Type t) { return t < EV_TYPE_COUNT ? NAMES[t] : "?"; }
 
 void init() { subCount = 0; }

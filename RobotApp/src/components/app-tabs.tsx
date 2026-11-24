@@ -16,6 +16,10 @@ export default function AppTabs() {
         <NativeTabs.Trigger.Label>Robots</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="antenna.radiowaves.left.and.right" md="sensors" />
       </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="hub">
+        <NativeTabs.Trigger.Label>Hub</NativeTabs.Trigger.Label>
+        <NativeTabs.Trigger.Icon sf="square.grid.2x2.fill" md="dashboard" />
+      </NativeTabs.Trigger>
       <NativeTabs.Trigger name="control">
         <NativeTabs.Trigger.Label>Control</NativeTabs.Trigger.Label>
         <NativeTabs.Trigger.Icon sf="gamecontroller.fill" md="sports_esports" />

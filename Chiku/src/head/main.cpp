@@ -28,6 +28,9 @@
 #include "alarm_timer.h"
 #include "weather.h"
 #include "net.h"
+#include "srvlink.h"
+#include "mic.h"
+#include "wake.h"
 #include "desk.h"
 #include "selftest.h"
 #include "diag.h"
@@ -46,6 +49,7 @@ static void uiTask(void*) {
         case events::EV_TOUCH_TAP: case events::EV_TOUCH_LONG: case events::EV_SWIPE:
         case events::EV_SHAKE: case events::EV_PICKUP: case events::EV_PAD:
         case events::EV_TAP_IMU: case events::EV_ALARM_RING:
+        case events::EV_CLAP: case events::EV_WAKEWORD: case events::EV_FLIP:
           power::activity();
           break;
         default: break;
@@ -87,6 +91,15 @@ static void actuatorTask(void*) {
     esp_task_wdt_reset();
     vTaskDelayUntil(&wake, pdMS_TO_TICKS(20));
   }
+}
+
+// The speech engine needs ~70 KB of internal RAM. Wi-Fi needs about 50 KB at start-up, so the engine
+// starts a few seconds later, when Wi-Fi is up.
+static void wakeStartTask(void*) {
+  vTaskDelay(pdMS_TO_TICKS(7000));
+  wake::init();
+  diag::set("wake_word", wake::running(), wake::running() ? "Hi ESP" : wake::error());
+  vTaskDelete(nullptr);
 }
 
 static void sensorTask(void*) {
@@ -141,13 +154,15 @@ void setup() {
 #endif
 #if FEATURE_AUDIO
   diag::set("audio", audio::init(), "ES8311 + I2S");
-#endif
-#if FEATURE_MIC
-  diag::set("mic", mic::init(), "ES7210 0x40");
+  mic::init();
+  diag::set("mic", mic::online(), "ES7210 mic array");
 #endif
   diag::set("pad_expander", pads::init(), "PCF8574 0x20");
 #if FEATURE_SERVOS
-  diag::set("servo_driver", servo::init(), "PCA9685 GPIO17/18");
+  diag::set("servo_driver", servo::init(), "PCA9685 GPIO16/17");
+#endif
+#if FEATURE_SERVOS
+  if (servo::online()) for (uint8_t c = 0; c < SERVO_COUNT; c++) servo::setTarget(c, 90);   // neutral pose: all at 90 deg
 #endif
   alarm_timer::init();
   weather::init();
@@ -162,7 +177,9 @@ void setup() {
   xTaskCreatePinnedToCore(actuatorTask, "actuator", 4096, nullptr, 4, nullptr, 0);
   xTaskCreatePinnedToCore(sensorTask, "sensors", 6144, nullptr, 3, nullptr, 0);
 #if FEATURE_NET
+  srvlink::init();
   net::init();
+  xTaskCreatePinnedToCore(wakeStartTask, "wakestart", 4096, nullptr, 1, nullptr, 0);
 #endif
 }
 

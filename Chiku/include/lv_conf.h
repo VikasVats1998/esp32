@@ -3,16 +3,16 @@
 #define LV_CONF_H
 
 #define LV_COLOR_DEPTH 16
+// Memory: on the robot every LVGL object lives in PSRAM (src/head/lv_mem_psram.c, no size limit);
+// the PC simulator (tools/uisim) uses LVGL's own heap of LV_MEM_SIZE.
+#ifdef ESP_PLATFORM
+#define LV_USE_STDLIB_MALLOC LV_STDLIB_CUSTOM
+#else
 #define LV_USE_STDLIB_MALLOC LV_STDLIB_BUILTIN
+#define LV_MEM_SIZE (1024 * 1024U)
+#endif
 #define LV_USE_STDLIB_STRING LV_STDLIB_BUILTIN
 #define LV_USE_STDLIB_SPRINTF LV_STDLIB_BUILTIN
-// LVGL's own heap. All screens are created at boot, so it needs room: 512 KB, placed in PSRAM on
-// the robot (on the PC simulator it is a plain static array).
-#define LV_MEM_SIZE (512 * 1024U)
-#ifdef ESP_PLATFORM
-#define LV_MEM_POOL_INCLUDE <esp_heap_caps.h>
-#define LV_MEM_POOL_ALLOC(size) heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT)
-#endif
 #define LV_MEM_POOL_EXPAND_SIZE 0
 #define LV_DEF_REFR_PERIOD 33
 #define LV_DPI_DEF 130

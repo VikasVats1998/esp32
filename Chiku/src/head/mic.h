@@ -1,15 +1,18 @@
-// mic.h - the two onboard microphones: ES7210 ADC (I2C 0x40 on the onboard bus) sends sound on the
-// same I2S bus as the speaker codec. A small task measures the loudness. Used for: listening bars on
-// the face, "loud sound -> surprised" (EV_LOUD), the Sound tile on the Sensors screen and the mic
-// check in first-time setup. Not included: wake word / speech recognition (needs ESP-SR, see docs).
-// While Chiku itself plays a sound the loud-sound event is suppressed (it would hear itself).
+// mic.h - microphone: sound level meter + clap detection (single / double clap).
+// Reads the ES7210 mic ADC through audio::micRead() in its own task. Ignores the
+// robot's own speaker (no clap events while sound plays and for 400 ms after).
 #pragma once
 #include <Arduino.h>
 
 namespace mic {
-bool init();            // after audio::init()
+void init();                    // after audio::init(); starts the task
 bool online();
-float level();          // 0..1 smoothed loudness
-int db();               // rough sound level in dB (not calibrated), -1 if offline
-uint32_t bursts();      // voice-like sounds heard so far (loud for 0.25-3 s): setup mic check
+int level();                    // 0..100 smoothed loudness (about -60..-10 dBFS)
+int peak();                     // 0..100 loudest sample in the last block
+float noiseFloor();             // 0..100 quiet-room level the detector adapted to
+void useExternalReader(bool on);    // true while the speech engine reads the mic (we get its samples)
+// UI kit additions
+int db();                       // rough sound level in dB (not calibrated, MIC_DB_OFFSET), -1 if offline
+uint32_t bursts();              // voice-like sounds heard so far (loud 0.25-3 s): setup mic check
+// EV_LOUD is published for a sudden loud sound (not while Chiku itself plays a sound)
 }  // namespace mic

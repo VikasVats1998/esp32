@@ -1,5 +1,5 @@
 // ui_goodnight.cpp - power off (UI kit): closed purple eyes, "Good night!", servos go home and are
-// released, then the AXP2101 switches the board off. (On USB power the board may start again.)
+// released, then power::shutdown(): the AXP2101 switches the board off (on USB: deep sleep, BOOT wakes).
 #include "ui_screens.h"
 #include "ui_common.h"
 #include "motion.h"
@@ -35,7 +35,7 @@ lv_obj_t* create(lv_obj_t* parent) {
 void update(uint32_t dt) {
   t += dt;
   if (step == 0 && t > 1500) { step = 1; servo::releaseAll(); }
-  if (step == 1 && t > 2800) { step = 2; display::setBrightness(0); power::powerOff(); }
+  if (step == 1 && t > 2800) { step = 2; power::shutdown(); }
 }
 void onShow() { t = 0; step = 0; motion::stop(); audio::babble(audio::BAB_SAD, 2); power::keepAwake(true); }
 void onHide() { power::keepAwake(false); }

@@ -31,6 +31,12 @@ struct Settings {
   bool servoCalibrated;
   bool setupDone;          // first-time setup finished (welcome, Wi-Fi, screen, servos, mic)
   int16_t screenRot;       // screen rotation 0..359 deg (round panel can sit at any angle)
+  char serverUrl[64];      // hub server, e.g. http://192.168.1.20:8080 (empty = off)
+  char serverToken[24];
+  bool clapWake;           // wake / react on claps
+  uint8_t clapSens;        // 0..100, higher = reacts to quieter claps
+  bool wakeWord;           // voice wake word (when the engine is available)
+  bool aiVoice;            // AI voice assistant (hook only, not implemented yet)
 };
 
 namespace storage {

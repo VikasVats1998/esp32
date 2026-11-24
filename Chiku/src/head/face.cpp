@@ -83,6 +83,8 @@ static volatile Mood base = M_NORMAL;
 static volatile Fx fxMode = FX_NONE;
 static volatile bool sleeping = false, shaking = false, captionOn = false, flashOn = false, wakeReq = false;
 static volatile Status status = ST_NONE;
+static volatile uint32_t reqRage = 0;
+static uint32_t rageLeft = 0;            // rage time left (UI task)
 static volatile int statusPct = 0;
 static volatile float reqLookX = 0, reqLookY = 0;
 static volatile bool reqLookFlag = false;
@@ -159,6 +161,8 @@ void setStatus(Status s, int pct) { status = s; statusPct = pct; }
 void playWakeUp() { wakeReq = true; }
 void setCaption(bool on) { captionOn = on; }
 void flash(bool on) { flashOn = on; }
+void wink(int) { setMood(M_WINK, 600); }
+void rage(uint32_t ms) { reqRage = ms; }
 Mood currentMood() { return mood; }
 
 // ---------- weather particles ----------
@@ -310,6 +314,11 @@ void update(uint32_t dtMs) {
     autoLookBlockUntil = nowMs + 3000; lookBackAt = 0;
   }
   if (wakeReq) { wakeReq = false; wakeStep = 1; wakeT = 0; }
+  if (reqRage) { rageLeft = reqRage; reqRage = 0; }
+  if (rageLeft) {                                  // rage: angry + shaking, then back to the base mood
+    rageLeft = rageLeft > dtMs ? rageLeft - dtMs : 0;
+    mood = M_ANGRY; holdLeft = rageLeft ? rageLeft : 1;
+  }
 
   // 2. pick what to show: wake-up > sleep > battery look (when resting) > mood
   const MoodDef* def = &MOODS[mood];
@@ -384,7 +393,7 @@ void update(uint32_t dtMs) {
   spin += dt * 300;
   float breathe = 1.f + 0.015f * sinf(t * 2 * PI / 4.f);         // 4 s breathing
   float jitter = 0;
-  if (shaking) jitter = sinf(t * 54) * 9;
+  if (shaking || rageLeft) jitter = sinf(t * 54) * 9;
   else if (mood == M_SCARED && !sleeping) jitter = sinf(t * 130) * 3;
   else if (fx == FX_COLD && !sleeping) jitter = sinf(t * 48) * 3;
 
@@ -428,7 +437,7 @@ void update(uint32_t dtMs) {
   } else talk = approach(talk, frame.mouth == MO_TALK ? 0.35f + 0.3f * sinf(t * 9) : 0, 0.3f);
   frame.mouthOpen = talk;
   if (frame.mouth == MO_BARS) {                    // listening: bars follow the microphone
-    float m = mic::online() ? mic::level() : 0.25f + 0.2f * sinf(t * 3);
+    float m = mic::online() ? mic::level() / 100.f : 0.25f + 0.2f * sinf(t * 3);
     for (int i = 0; i < 9; i++) {
       float shape = 1.f - fabsf(i - 4) / 5.f;
       frame.bars[i] = constrain(m * shape * (0.7f + 0.3f * sinf(t * 11 + i * 1.7f)), 0.f, 1.f);

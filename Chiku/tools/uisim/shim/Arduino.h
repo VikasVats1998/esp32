@@ -25,7 +25,11 @@ typedef int portMUX_TYPE;
 #define portMUX_INITIALIZER_UNLOCKED 0
 #define portENTER_CRITICAL(m) (void)(m)
 #define portEXIT_CRITICAL(m) (void)(m)
-struct EspClass { void restart() { exit(0); } };
+struct EspClass {
+  void restart() { exit(0); }
+  uint32_t getFreeHeap() { return 120000; }
+  uint32_t getFreePsram() { return 6500000; }
+};
 extern EspClass ESP;
 class String {
   std::string s;

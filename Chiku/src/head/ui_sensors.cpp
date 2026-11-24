@@ -19,6 +19,7 @@ static void onTile(lv_event_t* e) {
   if (t == T_DIST) ui::show(ui::S_SONAR);
   else if (t == T_CAM) ui::show(ui::S_CAMERA);
   else if (t == T_WIFI) ui::show(ui::S_NETWORK);
+  else if (t == T_IMU) ui::show(ui::S_MOTION);
 }
 
 lv_obj_t* create(lv_obj_t* parent) {
@@ -29,7 +30,7 @@ lv_obj_t* create(lv_obj_t* parent) {
   static const uint32_t COL[T_COUNT] = {uic::C_YELLOW, uic::C_PINK, uic::C_GREEN, uic::C_PURPLE, uic::C_ORANGE, uic::C_CYAN};
   for (int i = 0; i < T_COUNT; i++) {
     int x = 73 + (i % 2) * 164, y = 100 + (i / 2) * 92;
-    bool link = i == T_DIST || i == T_CAM || i == T_WIFI;
+    bool link = i == T_DIST || i == T_CAM || i == T_WIFI || i == T_IMU;
     lv_obj_t* c = uic::card(p, x, y, 156, 84, link ? onTile : nullptr, (void*)(intptr_t)i);
     uic::label(c, &inter_14, COL[i], ICON[i], 12, LV_ALIGN_TOP_LEFT, 16);
     uic::label(c, &inter_14, uic::C_MUTED, NAME[i], 12, LV_ALIGN_TOP_LEFT, 40);

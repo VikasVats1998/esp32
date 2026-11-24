@@ -26,6 +26,11 @@ UI_SCREEN(ui_ringing)
 UI_SCREEN(ui_notify)
 UI_SCREEN(ui_boot)
 UI_SCREEN(ui_setup)
+UI_SCREEN(ui_light)      // hub dashboard screens (ui_dash.cpp)
+UI_SCREEN(ui_devices)
+UI_SCREEN(ui_fan)
+UI_SCREEN(ui_motion)
+UI_SCREEN(ui_system)
 #undef UI_SCREEN
 
 // Extra entry points used by other modules

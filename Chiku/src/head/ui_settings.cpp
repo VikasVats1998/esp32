@@ -12,9 +12,9 @@
 #include "display.h"
 
 namespace ui_settings {
-enum Row { R_BRI, R_VOL, R_MODE, R_SCREEN, R_SERVO, R_NET, R_DEMO, R_ALARM, R_SETUP, R_WIFI_RESET, R_FW, R_COUNT };
+enum Row { R_BRI, R_VOL, R_MODE, R_SCREEN, R_SERVO, R_NET, R_HUB, R_DESK, R_DEMO, R_ALARM, R_SETUP, R_WIFI_RESET, R_FW, R_COUNT };
 static const char* NAMES[R_COUNT] = {"Brightness", "Volume", "Mode", "Screen orientation", "Servo calibration",
-                                     "Wi-Fi", "Mood demo", "Test alarm", "First-time setup", "Forget Wi-Fi", "Firmware"};
+                                     "Wi-Fi", "Hub & voice", "Standing desk", "Mood demo", "Test alarm", "First-time setup", "Forget Wi-Fi", "Firmware"};
 static lv_obj_t* val[R_COUNT];
 static uint32_t resetArmed = 0;
 
@@ -29,6 +29,8 @@ static void onRow(lv_event_t* e) {
     case R_SCREEN: ui::show(ui::S_ORIENT); break;
     case R_SERVO: ui::show(ui::S_CALIB); break;
     case R_NET: ui::show(ui::S_NETWORK); break;
+    case R_HUB: ui::show(ui::S_SYSTEM); break;
+    case R_DESK: ui::show(ui::S_DESK); break;
     case R_DEMO: ui::startMoodDemo(); break;
     case R_ALARM: alarm_timer::testRing(); break;
     case R_SETUP: s.setupDone = false; storage::save(); ui::show(ui::S_SETUP); break;
@@ -61,6 +63,8 @@ void update(uint32_t) {
   snprintf(b, sizeof(b), "%d\xC2\xB0", display::rotation()); uic::setText(val[R_SCREEN], b);
   uic::setText(val[R_SERVO], s.servoCalibrated ? "Done" : "Not yet");
   uic::setText(val[R_NET], net::connected() ? s.ssid : "Offline");
+  uic::setText(val[R_HUB], LV_SYMBOL_RIGHT);
+  uic::setText(val[R_DESK], LV_SYMBOL_RIGHT);
   uic::setText(val[R_DEMO], LV_SYMBOL_PLAY);
   uic::setText(val[R_ALARM], LV_SYMBOL_BELL);
   uic::setText(val[R_SETUP], LV_SYMBOL_RIGHT);

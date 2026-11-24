@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Otto Calibration</title>
+<style>
+:root{--bg:#0f1218;--card:#181d27;--line:#2a3140;--fg:#e6e9ef;--mut:#8b93a5;--ok:#3ddc84;--warn:#ffb84d;--bad:#ff5d5d;--acc:#4da3ff}
+@media(prefers-color-scheme:light){:root{--bg:#f3f5f9;--card:#fff;--line:#d9deea;--fg:#1a2030;--mut:#5b6478}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px system-ui,sans-serif;padding:16px;max-width:1100px;margin:auto}
+h1{font-size:20px;margin:0 0 12px}h2{font-size:15px;margin:0 0 10px}
+.top{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+button{background:var(--acc);color:#fff;border:0;border-radius:8px;padding:8px 13px;font-size:14px;cursor:pointer}
+button.sec{background:var(--bg);color:var(--fg);border:1px solid var(--line)}button.go{background:var(--ok);color:#06210f;font-weight:700}
+button.on{background:var(--bad)}button:active{transform:scale(.97)}
+.pill{padding:4px 10px;border-radius:99px;border:1px solid var(--line);color:var(--mut);font-size:13px}.pill.on{color:var(--ok);border-color:var(--ok)}.pill.dirty{color:var(--warn);border-color:var(--warn)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin-bottom:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}
+.card.sel{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc)}
+.big{font-size:34px;font-weight:700;font-variant-numeric:tabular-nums}
+.row{display:flex;align-items:center;gap:8px;margin:8px 0;flex-wrap:wrap}.row>span{color:var(--mut);font-size:13px;min-width:62px}
+input[type=range]{flex:1;min-width:120px}.mut{color:var(--mut);font-size:13px}
+.dial{display:block;margin:4px auto 0}
+.touch{display:flex;gap:10px}.t{flex:1;text-align:center;padding:12px 4px;border-radius:10px;border:1px solid var(--line);color:var(--mut)}
+.t.on{background:var(--ok);color:#06210f;border-color:var(--ok);font-weight:700}
+pre{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px;overflow:auto;margin:8px 0;font-size:13px}
+canvas{width:100%;height:110px;display:block}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:14px}@media(max-width:700px){.cols{grid-template-columns:1fr}}
+.warn{color:var(--bad);font-weight:600}
+</style></head><body>
+<h1>Otto free-servo test &amp; sensors</h1>
+<div class="mut" style="margin:-6px 0 12px">Servos start <b>FREE</b> (no signal, limp) so you can pose Otto by hand. Move a slider or press Hold to make a servo hold that angle; Free releases it again.</div>
+<div class="top">
+  <span class="pill" id="conn">waiting for data…</span><span class="pill" id="dirty"></span>
+  <button class="go" id="save">💾 Save to board</button>
+  <button class="sec" id="freeall">🔓 Free all servos</button>
+  <button class="sec" id="centre">Hold all at 90°</button>
+  <button class="sec" id="zero">Reset all trims</button>
+</div>
+<div class="grid" id="servos"></div>
+<div class="cols">
+  <div class="card"><h2>Ultrasonic (TRIG 23 / ECHO 0)</h2>
+    <div class="big" id="cm">–</div><canvas id="hist" width="500" height="110"></canvas>
+    <div class="mut" id="cmnote"></div></div>
+  <div class="card"><h2>Touch pads</h2>
+    <div class="touch" id="touch"></div>
+    <div class="mut" style="margin-top:10px">GPIO1–4 · lights up when touched. Unconnected pads stay dark.</div>
+    <h2 style="margin-top:16px">Code for your sketch</h2><pre id="code">–</pre>
+    <button class="sec" id="copy">Copy</button></div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const names=['LEFT HIP','RIGHT HIP','LEFT FOOT','RIGHT FOOT'],pins=[9,5,17,16],touchN=['HEAD','BACK','LEFT','RIGHT'];
+let trim=[0,0,0,0],rev=[0,0,0,0],man=[-1,-1,-1,-1],sel=0,last=0,hist=[],drag=-1;
+const send=c=>fetch('/cmd',{method:'POST',body:c}).catch(()=>{});
+// build servo cards
+$('servos').innerHTML=[0,1,2,3].map(i=>`
+<div class="card" id="c${i}"><h2>${i+1}. ${names[i]} <span class="mut">GPIO${pins[i]}</span></h2>
+ <div class="row"><div class="big" id="tv${i}">+0</div><span>trim °</span></div>
+ <div class="row"><button class="sec" data-t="${i},-5">−5</button><button class="sec" data-t="${i},-1">−1</button>
+  <button class="sec" data-t="${i},1">+1</button><button class="sec" data-t="${i},5">+5</button><button class="sec" data-t="${i},0">0</button></div>
+ <div class="row"><span>State</span><b id="st${i}" class="mut">FREE</b></div>
+ <div class="row"><span>Signal</span><b id="sg${i}" class="mut">–</b></div>
+ <div class="row"><span>Angle</span><input type="range" min="0" max="180" value="90" id="a${i}"><b id="av${i}">free</b></div>
+ <div class="row"><button class="sec" data-a="${i},45">45</button><button class="sec" data-a="${i},90">90</button><button class="sec" data-a="${i},135">135</button><button class="go" data-a="${i},-1">Free</button><button class="sec" id="w${i}">Wiggle</button></div>
+ <div class="row"><button class="sec" id="r${i}">Reverse: no</button></div></div>`).join('');
+$('touch').innerHTML=touchN.map((n,i)=>`<div class="t" id="t${i}">${n}<br><small>GPIO${i+1}</small></div>`).join('');
+document.querySelectorAll('[data-t]').forEach(b=>b.onclick=()=>{const [i,d]=b.dataset.t.split(',').map(Number);
+  const v=d===0?0:Math.max(-45,Math.min(45,trim[i]+d));trim[i]=v;send(`!t,${i},${v}`);send(`!s,${i}`);});
+document.querySelectorAll('[data-a]').forEach(b=>b.onclick=()=>{const [i,v]=b.dataset.a.split(',').map(Number);
+  if(v>=0)$('a'+i).value=v;$('av'+i).textContent=v<0?'free':v+'°';send(`!a,${i},${v}`);send(`!s,${i}`);});
+[0,1,2,3].forEach(i=>{const s=$('a'+i);
+  s.onpointerdown=()=>drag=i;s.onpointerup=()=>drag=-1;
+  s.oninput=()=>{$('av'+i).textContent=s.value+'°';send(`!a,${i},${s.value}`);send(`!s,${i}`);};
+  $('r'+i).onclick=()=>{rev[i]^=1;send(`!r,${i},${rev[i]}`);send(`!s,${i}`);};});
+$('save').onclick=()=>send('!w');$('centre').onclick=()=>send('!c');$('freeall').onclick=()=>send('!f');
+$('zero').onclick=()=>[0,1,2,3].forEach(i=>{trim[i]=0;send(`!t,${i},0`)});
+$('copy').onclick=()=>navigator.clipboard&&navigator.clipboard.writeText($('code').textContent);
+const wig=[null,null,null,null];
+[0,1,2,3].forEach(i=>{$('w'+i).onclick=()=>{
+  if(wig[i]){clearInterval(wig[i]);wig[i]=null;$('w'+i).textContent='Wiggle';return;}
+  $('w'+i).textContent='Stop wiggle';const t0=Date.now();send(`!s,${i}`);
+  wig[i]=setInterval(()=>send(`!a,${i},${Math.round(90+70*Math.sin((Date.now()-t0)/350))}`),80);};
+  document.querySelector(`[data-a="${i},-1"]`).addEventListener('click',()=>{if(wig[i]){clearInterval(wig[i]);wig[i]=null;$('w'+i).textContent='Wiggle';}});});
+const es=new EventSource('/stream');
+es.onmessage=e=>{const l=e.data.trim();if(!l.startsWith('T,'))return;const p=l.split(',');if(p.length<15)return;const ms=p.length>=19?[+p[15],+p[16],+p[17],+p[18]]:null;
+  last=Date.now();sel=+p[1];trim=[+p[3],+p[4],+p[5],+p[6]];const rm=+p[7],tm=+p[8],cm=+p[9],dirty=+p[10];
+  for(let i=0;i<4;i++){rev[i]=rm>>i&1;man[i]=+p[11+i];
+    $('tv'+i).textContent=(trim[i]>0?'+':'')+trim[i];$('r'+i).textContent='Reverse: '+(rev[i]?'YES':'no');$('r'+i).classList.toggle('on',!!rev[i]);
+    $('c'+i).classList.toggle('sel',i===sel);$('t'+i).classList.toggle('on',!!(tm>>i&1));
+    const held=man[i]>=0;if(ms){$('sg'+i).textContent=held?(ms[i]>0?'pulse '+ms[i]+' µs ✔ (pin is driving)':'NO PULSE ✘'):'none (free)';$('sg'+i).style.color=held&&ms[i]>0?'var(--ok)':held?'var(--bad)':'var(--mut)';}$('st'+i).textContent=held?'HOLDING '+man[i]+'°':'FREE (limp)';$('st'+i).style.color=held?'var(--warn)':'var(--ok)';
+    $('a'+i).style.opacity=held?1:.45;
+    if(drag!==i&&held){$('a'+i).value=man[i];$('av'+i).textContent=man[i]+'°';}
+    if(drag!==i&&!held){$('av'+i).textContent='free';}}
+  $('dirty').textContent=dirty?'● unsaved changes':'saved';$('dirty').className='pill'+(dirty?' dirty':'');
+  if(cm>0){$('cm').textContent=cm.toFixed(0)+' cm';$('cmnote').textContent='';}
+  else{$('cm').textContent='no echo';$('cmnote').innerHTML='<span class="warn">No echo</span> – check TRIG/ECHO wiring, the 1k/2k divider, 5V on VCC, or nothing in range (2–400 cm).';}
+  hist.push(cm>0?cm:null);if(hist.length>120)hist.shift();
+  $('code').textContent=`int  trim[4]    = {${trim.join(', ')}};\nbool reverse[4] = {${rev.map(r=>r?'true':'false').join(', ')}};`;};
+setInterval(()=>{const ok=Date.now()-last<1000;$('conn').textContent=ok?'connected':'no data from board';$('conn').className='pill'+(ok?' on':'')},500);
+// ultrasonic history
+const cv=$('hist'),g=cv.getContext('2d');
+(function d(){requestAnimationFrame(d);const css=v=>getComputedStyle(document.documentElement).getPropertyValue(v);
+  g.clearRect(0,0,500,110);g.strokeStyle=css('--line');g.beginPath();[28,55,82].forEach(y=>{g.moveTo(0,y);g.lineTo(500,y)});g.stroke();
+  g.strokeStyle=css('--acc');g.lineWidth=2;g.beginPath();let pen=false;
+  hist.forEach((v,i)=>{if(v==null){pen=false;return}const x=i*500/120,y=110-Math.min(v,200)/200*105;pen?g.lineTo(x,y):g.moveTo(x,y);pen=true});g.stroke();})();
+</script></body></html>

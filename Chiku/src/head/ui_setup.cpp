@@ -143,7 +143,7 @@ void update(uint32_t dt) {
       if (t - okSince > 1500 || t < okSince) { okSince = 0; go(SCREEN); }
     }
   } else if (step == MIC) {
-    float lv = mic::online() ? mic::level() : 0;
+    float lv = mic::online() ? mic::level() / 100.f : 0;
     for (int i = 0; i < 7; i++) {
       float shape = 1.f - fabsf(i - 3) / 4.f;
       lv_obj_set_height(bars[i], 10 + (int)(40 * lv * shape * (0.7f + 0.3f * sinf(t / 60.f + i))));

@@ -40,6 +40,11 @@ enum Type : uint8_t {
   EV_LOUD,           // a=sound level dB (microphones heard a sudden loud sound)
   EV_NOTIFY,         // a=mood id: a notification arrived (text: ui_notify)
   EV_BATTERY,        // a=1 low battery, 2 charging started, 3 back to normal; b=percent
+  EV_CLAP,           // a=1 single, 2 double clap (microphone)
+  EV_FLIP,           // a=1 turned upside down, 0 upright again
+  EV_WAKEWORD,       // a=word id (voice wake word heard)
+  EV_VOICE,          // a=voice command id (wake::Cmd), spoken after the wake word
+  EV_VOICE_END,      // command window closed (timeout) - back to waiting for the wake word
   EV_TYPE_COUNT
 };
 

@@ -8,7 +8,7 @@
 namespace ui_menu {
 struct Item { const char* text; uint32_t color; ui::Screen screen; };
 static const Item ITEMS[8] = {             // clockwise from the top
-  {"Desk", uic::C_GREEN, ui::S_DESK},      {"Alarms", uic::C_CYAN, ui::S_ALARMS},
+  {"Home", uic::C_GREEN, ui::S_DEVICES},      {"Alarms", uic::C_CYAN, ui::S_ALARMS},
   {"Timer", uic::C_ORANGE, ui::S_TIMER},   {"Sensors", uic::C_PINK, ui::S_SENSORS},
   {"Games", uic::C_YELLOW, ui::S_GAMES},   {"Moves", uic::C_PURPLE, ui::S_MOVES},
   {"Settings", uic::C_GREY, ui::S_SETTINGS}, {"Power", uic::C_RED, ui::S_POWER},

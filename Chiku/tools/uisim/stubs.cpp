@@ -20,6 +20,8 @@
 #include "desk.h"
 #include "display.h"
 #include "touch.h"
+#include "srvlink.h"
+#include "wake.h"
 
 SimState sim;
 EspClass ESP;
@@ -53,12 +55,16 @@ void clearWifi() {}
 bool fsReady() { return true; }
 }
 namespace power {
+float vbusVolts() { return 5.02f; }
+float coreTempC() { return 41.5f; }
+float batteryVolts() { return 3.95f; }
+bool pmuOnline() { return true; }
 State state() { return ACTIVE; }
 int batteryPercent() { return sim.battery; }
 bool charging() { return sim.charging; }
 void keepAwake(bool) {}
 void sleepNow() {}
-void powerOff() {}
+void shutdown() { exit(0); }
 uint32_t idleMs() { return 0; }
 bool lowBattery() { return sim.battery < LOW_BATTERY_PCT; }
 }
@@ -117,12 +123,20 @@ void releaseAll() {}
 }
 namespace imu {
 bool online() { return true; }
+void getGyro(float& x, float& y, float& z) { x = 0.4f; y = -0.2f; z = 0.1f; }
+float roll() { return 4; }
+float pitch() { return -2; }
+bool flipped() { return false; }
+void calibrate() {}
+bool calibrated() { return true; }
 void getAccel(float& x, float& y, float& z) { x = 0.09f; y = -0.99f; z = 0.05f; }
 float tiltDeg() { return 3; }
 }
 namespace mic {
 bool online() { return true; }
-float level() { return sim.micLevel; }
+int level() { return (int)(sim.micLevel * 100); }
+int peak() { return (int)(sim.micLevel * 100) + 8; }
+float noiseFloor() { return 12; }
 int db() { return 48; }
 uint32_t bursts() { return 2; }
 }
@@ -131,6 +145,8 @@ void play(Melody, bool) {}
 void beep(uint16_t, uint16_t) {}
 void babble(Babble, uint8_t) {}
 float speechLevel() { return sim.speech; }
+void setMuted(bool) {}
+bool muted() { return false; }
 }
 namespace motion {
 const char* gaitName(Gait g) {
@@ -160,4 +176,33 @@ void toLogical(int16_t&, int16_t&) {}
 namespace touch {
 uint32_t holdMs() { return 0; }
 void setGestures(GestureMode) {}
+}
+
+// hub link (srvlink) with two fake devices, wake word engine
+namespace srvlink {
+bool enabled() { return true; }
+bool linked() { return true; }
+uint32_t ageMs() { return 400; }
+int count() { return 2; }
+bool get(int i, Device& d) {
+  if (i < 0 || i > 1) return false;
+  d = Device{};
+  strcpy(d.name, i == 0 ? "Living light" : "Desk fan");
+  d.type = i == 0 ? T_LIGHT : T_FAN;
+  d.on = true;
+  d.level = i == 0 ? 70 : 45;
+  return true;
+}
+int find(Type t, int) { return t == T_LIGHT ? 0 : t == T_FAN ? 1 : -1; }
+void setOn(int, bool) {}
+void setLevel(int, int) {}
+void toggle(int) {}
+float envTemp() { return 21.5f; }
+int envHumidity() { return 46; }
+bool aiAvailable() { return false; }
+void syncNow() {}
+}
+namespace wake {
+bool running() { return true; }
+const char* error() { return ""; }
 }

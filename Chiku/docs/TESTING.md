@@ -9,7 +9,7 @@ Use the phone app (`RobotApp`): **Test > Checklist** has a test for every screen
 
 ## 1. Before power
 - [ ] 5 V buck output measured (5.0 V) **before** connecting the PCA9685 V+; common GND everywhere.
-- [ ] PCA9685 on GPIO17/18, PCF8574 (0x20) on the same two wires, TTP223 body pad on GPIO16.
+- [ ] PCA9685 on GPIO16 (SDA) / GPIO17 (SCL), PCF8574 (0x20) on the same two wires, TTP223 body pad on GPIO18.
 - [ ] Servo horns **not** fitted yet.
 
 ## 2. Flash

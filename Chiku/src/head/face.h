@@ -35,6 +35,8 @@ void setBaseMood(Mood m);                    // mood to rest in
 Mood baseMood();
 void lookAt(float x, float y);               // -1..1, disables auto look for 3 s
 void setFx(Fx fx);                           // weather effect (persistent)
+void wink(int side = 1);                     // short wink (UI kit wink face, about 0.6 s)
+void rage(uint32_t ms);                      // furious: angry face + shaking for ms
 void setSleeping(bool on);                   // deep-sleep look: dim lines, z z
 void setShake(bool on);                      // jitter (alarm ringing)
 void setStatus(Status s, int percent);       // low battery / charging look

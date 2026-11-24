@@ -1,4 +1,5 @@
 // touch.cpp - see touch.h
+#include "display.h"
 #include "touch.h"
 #include "config.h"
 #include "bus.h"
@@ -20,7 +21,6 @@ static int16_t startX, startY, lastX, lastY;
 static uint32_t startMs;
 static bool longSent, moved;
 
-static void IRAM_ATTR onIrq() { irqFlag = true; }
 
 static void gestureStep(bool pressed, int16_t x, int16_t y) {
   uint32_t now = millis();
@@ -53,7 +53,7 @@ static void gestureStep(bool pressed, int16_t x, int16_t y) {
 static void readCb(lv_indev_t*, lv_indev_data_t* data) {
   static int16_t px = 0, py = 0;
   bool pressed = false;
-  if (ready && (irqFlag || down)) {
+  if (ready && (digitalRead(PIN_TP_INT) == LOW || irqFlag || down)) {
     irqFlag = false;
     int16_t x[2], y[2];
     bus::lock();
@@ -65,7 +65,7 @@ static void readCb(lv_indev_t*, lv_indev_data_t* data) {
       pressed = true;
     }
   }
-  gestureStep(pressed, px, py);
+  gestureStep(pressed, px, py);                      // px/py are already turned like the picture
   data->point.x = px;
   data->point.y = py;
   data->state = pressed ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
@@ -86,7 +86,7 @@ bool init() {
   }
   bus::unlock();
   if (!ready) return false;
-  attachInterrupt(digitalPinToInterrupt(PIN_TP_INT), onIrq, FALLING);
+  // no GPIO interrupt: the INT line is polled in readCb (an ISR here overflowed the IPC stack at boot)
 
   lv_indev_t* in = lv_indev_create();
   lv_indev_set_type(in, LV_INDEV_TYPE_POINTER);
