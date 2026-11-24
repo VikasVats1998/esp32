@@ -19,7 +19,7 @@ python3 Bringup/bringup.py doctor        # checks the tools and lists serial por
 | `bringup.py flash <chiku\|chiku-cam\|jinu\|desk\|probe>` | flash firmware (and web page / voice clips) |
 | `bringup.py boot <project>` | reset the board, check its boot log: hardware self-check items, crashes, reboot loops |
 | `bringup.py all` | find every ESP32 on USB and check its boot |
-| `bringup.py robot <host> [--active]` | Chiku / Jinu over Wi-Fi. `--active` also moves servos, plays sound, asks you to touch each pad (robot on a stand) |
+| `bringup.py robot <host> [--active]` | Chiku / Jinu over Wi-Fi (Chiku also: microphones, screen rotation). `--active` also shows every face (and on Chiku every screen), moves servos, plays sound, asks you to touch each pad and to clap for the mics (robot on a stand) |
 | `bringup.py desk <host> [--pair] [--active]` | desk module over the secure link. `--active` moves the desk a little |
 | `bringup.py probe desk` | guided measurement of the desk handset data line with the Probe board |
 

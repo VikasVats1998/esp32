@@ -15,7 +15,7 @@ Everything below can be done from the phone app: **Test, Checklist** (Desk group
 2. Plug the desk in. **Nudge UP / DOWN** (checklist): the desk moves about 1 cm and stops by itself.
 3. **STOP** test, then each **memory position** (only works if memories were saved with the handset).
 4. Height: compare the app value with the handset display; calibrate if it says "estimate".
-5. Robots: Control, Desk, Robots: pair, then the robot screen (Chiku long-press menu) and the app's robot desk buttons.
+5. Robots: Control, Desk, Robots: pair, then the robot screen (Chiku: swipe up, menu ring "Desk") and the app's robot desk buttons.
 
 ## Security checks
 

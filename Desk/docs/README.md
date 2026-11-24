@@ -25,7 +25,7 @@ pio run -e desk -t upload       # flash over USB-C (hold BOOT while plugging in)
 1. Wire it (WIRING.md), flash it, join `Desk-Setup` Wi-Fi and enter your network (once).
 2. Power-cycle the module: **3 minutes pairing window** (LED purple). Pair the phone (app: Control, Desk) and each robot ("Pair robot with desk").
 3. App: Control, Desk: height, hold-to-move UP/DOWN, STOP, memory positions, child lock. Test, Checklist: Desk tests.
-4. Chiku: long-press menu, "Desk control" (touch screen). Both robots react to the desk moving (look up/down, happy when it arrives).
+4. Chiku: swipe up on the face for the menu, then "Desk" (touch screen). Both robots react to the desk moving (look up/down, happy when it arrives).
 
 ## Status LED (the Super Mini's RGB LED)
 

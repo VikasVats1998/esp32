@@ -15,7 +15,7 @@ npx expo start            # scan the QR code with Expo Go (phone on the same Wi-
 ```
 
 1. **Robots**: *Scan Wi-Fi network* (asks every address of your subnet), or add `chiku.local` / `jinu.local` / an IP.
-2. **Control**: mode (Auto / Manual / Explore), mute, faces, feelings, moves, voice clips, look pad, Chiku screens.
+2. **Control**: mode (Auto / Manual / Explore), mute, faces (Chiku 22, Jinu 16), feelings, moves, voice clips, look pad, Chiku screens (every screen of the UI kit).
 3. **Test** (four views):
    * **Live**: touch pads lighting up, sonar bar, IMU, hardware status, display test patterns, sound test.
    * **Checklist**: one test for **every** screen, touch pad, sensor, motor and sound (about 40 tests). Automatic tests decide

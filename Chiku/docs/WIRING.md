@@ -45,6 +45,13 @@ so there is no clash. (If you ever join the buses, solder PCA9685 pad A0 -> addr
 The PCA9685 **OE pin is not wired** (no free pin). Servo outputs are switched off with the
 PCA9685 "full off" bit and the chip is put to sleep after 2 s idle.
 
+**Onboard, nothing to wire:** speaker codec ES8311 and the two microphones (ES7210, used for the sound
+level, listening bars and "loud sound -> surprised") share the I2S bus (MCLK 42, BCLK 9, WS 45, DOUT 8, DIN 10).
+Keep the microphone holes of the board open in the head shell.
+
+**Screen mounting:** the round panel may sit at any angle in the head. Fix it as it fits best, then set the
+angle once in Settings -> Screen orientation ([CALIBRATION.md](CALIBRATION.md)).
+
 ## Neck wires (7 wires, about 15 cm)
 
 | # | Wire | Head header pin | Body side |
@@ -67,8 +74,8 @@ Connect all GNDs together (buck GND, PCA9685 GND, neck GND, ESP32-CAM GND).
 |---|---|
 | PCA9685 V+ | 5 V buck output (5 A) + a 470-1000 uF capacitor close to the board |
 | PCA9685 ch0 / ch1 | left hip / right hip |
-| PCA9685 ch2 / ch3 | left ankle / right ankle |
-| PCA9685 ch4 | head pan (90 = forward, +-90 deg) |
+| PCA9685 ch2 / ch3 | left ankle / right ankle ("feet" in the UI kit) |
+| PCA9685 ch4 | head pan = "neck" in the UI kit (90 = forward, +-90 deg) |
 | TTP223 | VCC 3.3 V, GND, OUT -> neck wire 5 (active HIGH) |
 | HC-SR04P (3.3 V version) | VCC 3.3 V (from the ESP32-CAM 3V3 pin), GND, TRIG -> CAM GPIO15, ECHO -> CAM GPIO2 |
 
